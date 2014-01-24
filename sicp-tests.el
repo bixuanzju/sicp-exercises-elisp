@@ -188,11 +188,12 @@
   (filtered-accumulate '* 1 (lambda (k) k) 1 '1+ (- n 1) (lambda (k) (= (gcd k n) 1))))
 
 ;; 1.35
-(setq tolerance 0.00001)
+(defvar sicp-tolerance 0.00001)
+
 (defun fixed-point (f first-guess)
   (defun close-enough? (v1 v2)
       (< (abs (- v1 v2))
-         tolerance))
+         sicp-tolerance))
   (defun try (guess)
     (let ((next (funcall f guess)))
       (if (close-enough? next guess)
@@ -200,13 +201,13 @@
         (try next))))
   (try first-guess))
 
-(setq golden-ratio (fixed-point (lambda (x) (+ 1 (/ 1 x))) 1.0))
+(defvar golden-ratio (fixed-point (lambda (x) (+ 1 (/ 1 x))) 1.0))
 
 ;; 1.36
 (defun fixed-point-print (f first-guess)
   (defun close-enough? (v1 v2)
     (< (abs (- v1 v2))
-       tolerance))
+       sicp-tolerance))
   (defun try (guess)
     (let ((next (funcall f guess)))
       (if (close-enough? next guess)
@@ -226,8 +227,8 @@
       (iter (- kk 1) (/ (funcall n kk) (+ (funcall d kk) result)))))
   (iter k 0))
 
-(cont-frac (lambda (i) 1.0)
-           (lambda (i) 1.0)
+(cont-frac (lambda (_) 1.0)
+           (lambda (_) 1.0)
            500)
 
 ;; 1.38
@@ -237,7 +238,7 @@
       (* (/ (+ k 1) 3) 2)
     1))
 
-(setq e (+ 2 (cont-frac (lambda (i) 1.0) 'di 400)))
+(defvar sicp-e (+ 2 (cont-frac (lambda (_) 1.0) 'di 400)))
 
 ;; 1.39
 (defun tan-cf (x k)
@@ -249,9 +250,9 @@
              k))
 
 ;; 1.40
-(setq dx 0.00001)
+(defvar sicp-dx 0.00001)
 (defun deriv (g)
-  (lambda (x) (/ (- (funcall g (+ x dx)) (funcall g x)) dx)))
+  (lambda (x) (/ (- (funcall g (+ x sicp-dx)) (funcall g x)) sicp-dx)))
 
 (defun newton-transformer (g)
   (lambda (x) (- x (/ (funcall g x) (funcall (deriv g) x)))))
@@ -280,7 +281,7 @@
 
 ;; 1.44
 (defun smooth (f)
-  (lambda (x) (/ (+ (funcall f (- x dx)) (funcall f x) (funcall f (+ x dx)))
+  (lambda (x) (/ (+ (funcall f (- x sicp-dx)) (funcall f x) (funcall f (+ x sicp-dx)))
             3)))
 (defun n-fold-smooth (f n)
   (funcall (repeated 'smooth n) f))
@@ -305,14 +306,14 @@
 
 (defun sqrt-iter (x)
   (defun good-enough? (guess)
-    (< (abs (- (square guess) x)) tolerance))
+    (< (abs (- (square guess) x)) sicp-tolerance))
   (defun improve (guess)
     (funcall (average-damp (lambda (y) (/ x y))) guess))
   (funcall (iterative-improve 'good-enough? 'improve) 1.0))
 
 (defun fixed-point-iter (f first-guess)
   (defun close-enough? (guess)
-    (< (abs (- (funcall f guess) guess)) tolerance))
+    (< (abs (- (funcall f guess) guess)) sicp-tolerance))
   (defun improve (guess)
     (funcall f guess))
   (funcall (iterative-improve 'close-enough? 'improve) first-guess))
