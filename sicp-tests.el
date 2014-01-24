@@ -1,12 +1,5 @@
 ;;; -*- lexical-binding: t -*-
 
-(require 'dash)
-
-;; 1.3
-(defun square-of-two (a b c)
-  (let ((sorted (sort (list a b c) '>)))
-    (-reduce '+ (-map (lambda (a1) (* a1 a1)) (-take 2 sorted)))))
-
 ;; 1.11
 (defun f-recr (n)
   "By means of a recursive process"
@@ -29,13 +22,16 @@
    (t (+ (pascal-triangle (- a 1) (- b 1)) (pascal-triangle (- a 1) b)))))
 
 ;; 1.16
+(defun even? (a)
+  (= (% a 2) 0))
+
 (defun fast-exp-iter (b n)
   (defun iter (a base count)
     "Use invariant quantity a*base^count,this is a powerful technique when
      designing iterative algorithms."
     (cond
      ((= count 0) a)
-     ((evenp count) (iter a (* base base) (/ count 2)))
+     ((even? count) (iter a (* base base) (/ count 2)))
      (t (iter (* a base) base (- count 1)))))
   (iter 1 b n))
 
@@ -48,7 +44,7 @@
 (defun log-multi (a b)
   (cond
    ((= b 0) 0)
-   ((evenp b) (double (log-multi a (halve b))))
+   ((even? b) (double (log-multi a (halve b))))
    (t (+ a (log-multi a (- b 1))))))
 
 ;; 1.18
@@ -57,7 +53,7 @@
     "Use invariant quantity s+ab"
     (cond
      ((= b 0) s)
-     ((evenp b) (iter s (double a) (halve b)))
+     ((even? b) (iter s (double a) (halve b)))
      (t (iter (+ s a) a (- b 1)))))
   (iter 0 a b))
 
@@ -67,7 +63,7 @@
 (defun fib-iter (a b p q count)
   (cond
    ((= count 0) b)
-   ((evenp count)
+   ((even? count)
     (fib-iter a
               b
               (+ (* p p) (* q q))
@@ -89,8 +85,8 @@
    (t (find-divisor n (next test-divisor)))))
 (defun square (n)
   (* n n))
-(defun divides? (t n)
-  (= (mod n t) 0))
+(defun divides? (a b)
+  (= (mod b a) 0))
 (defun next (n)
   (if (= 2 n) 3
     (+ 2 n)))
@@ -106,7 +102,7 @@
 
 (defun integral (f a b n)
   (let* ((h (/ (- b a) (float n)))
-         (term (lambda (k) (if (evenp k)
+         (term (lambda (k) (if (even? k)
                           (* 2 (funcall f (+ a (* k h))))
                         (* 4 (funcall f (+ a (* k h))))))))
     (* (/ h 3) (+ (funcall f a)
@@ -219,9 +215,9 @@
         (try next))))
   (try first-guess))
 
-(fixed-point-print (lambda (x) (/ (log 1000) (log x))) 5.0)
+;; (fixed-point-print (lambda (x) (/ (log 1000) (log x))) 5.0)
 
-(fixed-point-print (lambda (x) (* 0.5 (+ x (/ (log 1000) (log x))))) 5.0)
+;; (fixed-point-print (lambda (x) (* 0.5 (+ x (/ (log 1000) (log x))))) 5.0)
 
 ;; 1.37
 (defun cont-frac (n d k)
@@ -270,7 +266,7 @@
   (newton-method (cubic a b c) 1.0))
 
 ;; 1.41
-(defun double (g)
+(defun double-func (g)
   (lambda (x) (funcall g (funcall g x))))
 
 ;; 1.42
@@ -281,3 +277,48 @@
 (defun repeated (f n)
   (if (= n 1) f
     (compose f (repeated f (- n 1)))))
+
+;; 1.44
+(defun smooth (f)
+  (lambda (x) (/ (+ (funcall f (- x dx)) (funcall f x) (funcall f (+ x dx)))
+            3)))
+(defun n-fold-smooth (f n)
+  (funcall (repeated 'smooth n) f))
+
+;; 1.45
+(defun average-damp (f)
+  (lambda (x) (/ (+ (funcall f x) x) 2)))
+
+(defun nth-root (x n)
+  (fixed-point (funcall (repeated 'average-damp (- n 2))
+                        (lambda (y) (/ x (expt y (- n 1)))))
+               1.0))
+
+;; 1.46
+(defun iterative-improve (good-enough? improve)
+  (defun iter (guess)
+    (if (funcall good-enough? guess)
+        guess
+      (iter (funcall improve guess))))
+  (lambda (guess)
+    (iter guess)))
+
+(defun sqrt-iter (x)
+  (defun good-enough? (guess)
+    (< (abs (- (square guess) x)) tolerance))
+  (defun improve (guess)
+    (funcall (average-damp (lambda (y) (/ x y))) guess))
+  (funcall (iterative-improve 'good-enough? 'improve) 1.0))
+
+(defun fixed-point-iter (f first-guess)
+  (defun close-enough? (guess)
+    (< (abs (- (funcall f guess) guess)) tolerance))
+  (defun improve (guess)
+    (funcall f guess))
+  (funcall (iterative-improve 'close-enough? 'improve) first-guess))
+
+
+
+;; Local Variables:
+;; max-specpdl-size: 2000
+;; End:
