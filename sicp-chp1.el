@@ -188,7 +188,7 @@
   (filtered-accumulate '* 1 (lambda (k) k) 1 '1+ (- n 1) (lambda (k) (= (gcd k n) 1))))
 
 ;; 1.35
-(defvar sicp-tolerance 0.00001)
+(defconst sicp-tolerance 0.00001)
 
 (defun fixed-point (f first-guess)
   (defun close-enough? (v1 v2)
@@ -201,7 +201,7 @@
         (try next))))
   (try first-guess))
 
-(defvar golden-ratio (fixed-point (lambda (x) (+ 1 (/ 1 x))) 1.0))
+(defconst golden-ratio (fixed-point (lambda (x) (+ 1 (/ 1 x))) 1.0))
 
 ;; 1.36
 (defun fixed-point-print (f first-guess)
@@ -232,13 +232,12 @@
            500)
 
 ;; 1.38
-
 (defun di (k)
   (if (= (% (+ k 1) 3) 0)
       (* (/ (+ k 1) 3) 2)
     1))
 
-(defvar sicp-e (+ 2 (cont-frac (lambda (_) 1.0) 'di 400)))
+(defconst sicp-e (+ 2 (cont-frac (lambda (_) 1.0) 'di 400)))
 
 ;; 1.39
 (defun tan-cf (x k)
@@ -250,7 +249,7 @@
              k))
 
 ;; 1.40
-(defvar sicp-dx 0.00001)
+(defconst sicp-dx 0.00001)
 (defun deriv (g)
   (lambda (x) (/ (- (funcall g (+ x sicp-dx)) (funcall g x)) sicp-dx)))
 
@@ -318,8 +317,6 @@
     (funcall f guess))
   (funcall (iterative-improve 'close-enough? 'improve) first-guess))
 
-
-
 ;; Local Variables:
-;; max-specpdl-size: 2000
+;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
 ;; End:
