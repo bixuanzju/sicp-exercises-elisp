@@ -278,6 +278,137 @@
     (let ((rest (subset (cdr s))))
       (append (map (lambda (sub) (cons (car s) sub)) rest) rest))))
 
+;; 2.33
+(defun filter (pred lst)
+  (cond
+   ((null lst) nil)
+   ((funcall pred (car lst))
+    (cons (car lst) (filter pred (cdr lst))))
+   (t (filter pred (cdr lst)))))
+
+(defun accumulate (op initial lst)
+  (if (null lst) initial
+    (funcall op (car lst) (accumulate op initial (cdr lst)))))
+
+(defun sicp-map (p lst)
+  (accumulate (lambda (x y) (cons (funcall p x) y)) nil lst))
+
+(defun sicp-append (seq1 seq2)
+  (accumulate 'cons seq2 seq1))
+
+(defun sicp-length (lst)
+  (accumulate (lambda (_ y) (1+ y)) 0 lst))
+
+;; 2.34
+(defun horner-eval (x coefficient-sequence)
+  (accumulate (lambda (this-coeff higher-terms)
+                (+ (* higher-terms x) this-coeff))
+              0
+              coefficient-sequence))
+
+;; 2.35
+(defun count-leaves1 (tr)
+  (accumulate (lambda (tree leaves)
+                (if (atom tree)
+                    (+ 1 leaves)
+                  (+ (count-leaves tree)
+                     leaves)))
+              0
+              tr))
+(defun count-leaves2 (tr)
+  (accumulate '+ 0 (map (lambda (k)
+                          (if (atom k) 1
+                            (count-leaves2 k)))
+                        tr)))
+
+;; 2.36
+(defun accumulate-n (op init seqs)
+  (if (null (car seqs))
+      nil
+    (cons (accumulate op init (map 'car seqs))
+          (accumulate-n op init (map 'cdr seqs)))))
+
+;; 2.37
+(defun map-extend (op &rest ls)
+  (if (null (car ls))
+      nil
+    (cons (apply op (map 'car ls))
+          (apply 'map-extend op (map 'cdr ls)))))
+
+(defun dot-product (v w)
+  (accumulate '+ 0 (map-extend '* v w)))
+
+(defun matrix-*-vector (m v)
+  (map (lambda (mv) (dot-product mv v)) m))
+
+(defun transpose (mat)
+  (accumulate-n 'cons nil mat))
+
+(defun matrix-*-matrix (m n)
+  (let ((cols (transpose n)))
+    (map (lambda (row) (matrix-*-vector cols row)) m)))
+
+;; 2.39
+(defun fold-left (f acc l)
+  (if (null l) acc
+    (fold-left f (funcall f acc (car l)) (cdr l))))
+
+(defun reverse1 (seq)
+  (accumulate (lambda (x y) (append y (list x))) nil seq))
+(defun reverse2 (seq)
+  (fold-left (lambda (x y) (cons y x)) nil seq))
+
+;; 2.40
+(defun flatmap (proc seq)
+  (accumulate 'append nil (map proc seq)))
+(defun unique-pair (n)
+  (flatmap (lambda (i) (map (lambda (j) (list j i))
+                       (number-sequence 1 (- i 1))))
+           (number-sequence 1 n)))
+
+;; 2.41
+
+(defun unique-triple (n)
+  (filter (lambda (triple) (= (length triple)
+                         (length (remove-duplicates triple))))
+          (flatmap (lambda (i) (flatmap (lambda (j) (map (lambda (k) (list i j k))
+                                               (number-sequence 1 n)))
+                                   (number-sequence 1 n)))
+                   (number-sequence 1 n))))
+(defun all-triple (n s)
+  (filter (lambda (triple) (= s (apply '+ triple)))
+          (unique-triple n)))
+
+;; 2.42
+(defun queens (board-size)
+  (defun queen-cols (k)
+    (if (= k 0)
+        (list nil)
+      (filter
+       (lambda (positions) (safe? k positions))
+       (flatmap
+        (lambda (rest-of-queens)
+          (map (lambda (new-row)
+                 (adjoin-position
+                  new-row k rest-of-queens))
+               (number-sequence 1 board-size)))
+        (queen-cols (- k 1))))))
+  (defun adjoin-position (row k q)
+    (cons row q))
+  (defun andall (lst)
+    (if (null lst) t
+      (and (car lst) (andall (cdr lst)))))
+  (defun safe? (k pos)
+    (let ((row (car pos))
+          (col 1))
+      (andall (map (lambda (pair) (and (/= row (car pair))
+                                  (/= (abs (- (car pair) row))
+                                      (abs (- (cdr pair) col)))))
+                   (map-extend 'cons (cdr pos) (number-sequence 2 k))))))
+  (queen-cols board-size))
+
+
+
 
 ;; Local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
