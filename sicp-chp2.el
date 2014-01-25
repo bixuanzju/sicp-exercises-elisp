@@ -82,6 +82,201 @@
    which should return 3"
   (lambda (f) (lambda (x) (funcall (funcall n f) (funcall (funcall m f) x)))))
 
+;; 2.7
+(defun make-interval (a b)
+  (cons a b))
+
+(defun lower-bound (intvl)
+  (car intvl))
+(defun upper-bound (intvl)
+  (cdr intvl))
+
+(defun add-interval (x y)
+  (make-interval (+ (lower-bound x) (lower-bound y))
+                 (+ (upper-bound x) (upper-bound y))))
+
+(defun mul-interval (x y)
+  (let ((p1 (* (lower-bound x) (lower-bound y)))
+        (p2 (* (lower-bound x) (upper-bound y)))
+        (p3 (* (upper-bound x) (lower-bound y)))
+        (p4 (* (upper-bound x) (upper-bound y))))
+    (make-interval (min p1 p2 p3 p4)
+                   (max p1 p2 p3 p4))))
+
+(defun div-interval (x y)
+  (mul-interval
+   x
+   (make-interval (/ 1.0 (upper-bound y))
+                  (/ 1.0 (lower-bound y)))))
+
+;; 2.8
+(defun sub-interval (x y)
+  (add-interval x
+                (make-interval (- 0 (upper-bound y))
+                               (- 0 (lower-bound y)))))
+
+;; 2.9
+(defun width (x)
+  (/ (- (upper-bound x) (lower-bound x)) 2.0))
+
+;; (= (width (add-interval (make-interval 1 3) (make-interval 2 4)))
+;;    (+ (width (make-interval 1 3)) (width (make-interval 2 4))))
+
+;; (= (width (mul-interval (make-interval 1 3) (make-interval 2 4)))
+;;    (* (width (make-interval 1 3)) (width (make-interval 2 4))))
+
+;; 2.10
+(defun div-interval-safe (x y)
+  (if (= 0 (width y))
+      (error "Divide by zero!")
+    (mul-interval
+     x
+     (make-interval (/ 1.0 (upper-bound y))
+                    (/ 1.0 (lower-bound y))))))
+
+;; 2.12
+(defun make-center-percent (c per)
+  (cons (- c (* per c)) (+ c (* per c))))
+(defun center (x)
+  (let ((start (lower-bound x))
+        (end (upper-bound x)))
+    (/ (float (- end start)) (+ end start))))
+
+
+;; 2.13 sum of two tolerances
+
+;; 2.17
+(defun last-pair (lst)
+  (if (= (length lst) 1)
+      lst
+    (last-pair (cdr lst))))
+
+;; 2.18
+(defun sicp-reverse (lst)
+  (defun iter (l lst)
+    (if (null l)
+        lst
+      (iter (cdr l) (cons (car l) lst))))
+  (iter lst nil))
+
+;; 2.19
+(defun even? (a)
+  (= (mod a 2) 0))
+(defun odd? (a)
+  (/= (mod a 2) 0))
+
+(defun same-parity (a &rest lst)
+  (defun trans (l p)
+    (cond
+     ((null l) nil)
+     ((funcall p (car l)) (cons (car l) (trans (cdr l) p)))
+     (t (trans (cdr l) p))))
+  (if (even? a)
+      (cons a (trans lst 'even?))
+    (cons a (trans lst 'odd?))))
+
+;; 2.21
+(defun map (proc items)
+  (if (null items)
+      nil
+    (cons (funcall proc (car items)) (map proc (cdr items)))))
+(defun square-list1 (items)
+  (if (null items)
+      nil
+    (cons (* (car items) (car items)) (square-list1 (cdr items)))))
+(defun square-list2 (items)
+  (map (lambda (k) (* k k)) items))
+
+;; 2.23
+(defun for-each (proc lst)
+  (if (null lst) t
+    (funcall proc (car lst))
+    (for-each proc (cdr lst))))
+
+;; 2.27
+(defun deep-reverse (tree)
+  (cond
+   ((null tree) tree)
+   ((atom (car tree)) (append (deep-reverse (cdr tree)) (list (car tree))))
+   (t (append (deep-reverse (cdr tree))
+              (list (deep-reverse (car tree)))))))
+
+;; 2.28
+(defun fringe (tree)
+  (cond
+   ((null tree) nil)
+   ((atom (car tree)) (cons (car tree) (fringe (cdr tree))))
+   (t (append (fringe (car tree))
+              (fringe (cdr tree))))))
+
+;; 2.29
+(defun make-mobile (left right)
+  (list left right))
+
+(defun make-branch (length structure)
+  (list length structure))
+
+(defun left-branch (m)
+  (car m))
+(defun right-branch (m)
+  (car (cdr m)))
+(defun branch-length (b)
+  (car b))
+(defun branch-structure (b)
+  (car (cdr b)))
+
+(defun total-weight (mobile)
+  (let* ((left (left-branch mobile))
+         (right (right-branch mobile))
+         (ls (branch-structure left))
+         (rs (branch-structure right)))
+    (cond
+     ((and (atom ls) (atom rs)) (+ ls rs))
+     ((atom ls) (+ ls (total-weight rs)))
+     ((atom rs) (+ (total-weight ls) rs))
+     (t (+ (total-weight ls) (total-weight rs))))))
+
+(defun balance? (mobile)
+  (let* ((left (left-branch mobile))
+         (right (right-branch mobile))
+         (ls (branch-structure left))
+         (ll (branch-length left))
+         (rs (branch-structure right))
+         (rl (branch-length right)))
+    (cond
+     ((and (atom ls) (atom rs)) (= (* ll ls) (* rl rs)))
+     ((atom ls) (= (* rl (total-weight rs) (* ll ls))))
+     ((atom rs) (= (* ll (total-weight ls) (* rl rs))))
+     (t (= (* ll (total-weight ls)) (* rl (total-weight rs)))))))
+
+;; 2.30
+(defun square-tree1 (tree)
+  (map (lambda (sub-tree)
+         (if (atom sub-tree)
+             (* sub-tree sub-tree)
+           (square-tree sub-tree)))
+       tree))
+(defun square-tree2 (tree)
+  (cond
+   ((null tree) nil)
+   ((atom (car tree)) (cons (* (car tree) (car tree))
+                            (square-tree2 (cdr tree))))
+   (t (cons (square-tree2 (car tree))
+            (square-tree2 (cdr tree))))))
+
+;; 2.31
+(defun tree-map (proc tree)
+  (map (lambda (sub-tree)
+         (if (atom sub-tree)
+             (funcall proc sub-tree)
+           (tree-map proc sub-tree)))
+       tree))
+
+;; 2.32
+(defun subset (s)
+  (if (null s) (list nil)
+    (let ((rest (subset (cdr s))))
+      (append (map (lambda (sub) (cons (car s) sub)) rest) rest))))
 
 
 ;; Local Variables:
