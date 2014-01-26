@@ -407,7 +407,91 @@
                    (map-extend 'cons (cdr pos) (number-sequence 2 k))))))
   (queen-cols board-size))
 
+;; 2.54
+(defun equal? (a b)
+  "Work for both number and symbol"
+  (cond
+   ((and (null a) (null b)) t)
+   ((and (numberp a) (numberp b) (= a b)))
+   ((and (symbolp a) (symbolp b)) (eq a b))
+   ((and (listp a) (listp b))
+    (and (equal? (car a) (car b))
+         (equal? (cdr a) (cdr b))))
+   (t nil)))
 
+;; 2.56 2.57
+(defun deriv (exp var)
+  (cond
+   ((numberp exp) 0)
+   ((variable? exp) (if (same-variable? exp var) 1 0))
+   ((sum? exp) (make-sum (deriv (addend exp) var)
+                         (deriv (augend exp) var)))
+   ((product? exp)
+    (make-sum
+     (make-product (multiplier exp)
+                   (deriv (multiplicand exp) var))
+     (make-product (multiplicand exp)
+                   (deriv (multiplier exp) var))))
+   ((exponentiation? exp)
+    (make-product
+     (make-product (exponent exp)
+                   (make-exponentiation (base exp)
+                                        (- (exponent exp) 1)))
+     (deriv (base exp) var)))
+   (t (error "unknown expression type: DERIV"))))
+
+
+(defun variable? (exp) (symbolp exp))
+
+(defun same-variable? (exp1 exp2)
+  (and (variable? exp1) (variable? exp2) (eq exp1 exp2)))
+
+(defun make-sum (a1 a2)
+  (cond
+   ((=number? a1 0) a2)
+   ((=number? a2 0) a1)
+   ((and (numberp a1) (numberp a2)) (+ a1 a2))
+   (t (list '+ a1 a2))))
+
+(defun =number? (exp n) (and (numberp exp) (= exp n)))
+
+(defun make-product (m1 m2)
+  (cond
+   ((or (=number? m1 0) (=number? m2 0)) 0)
+   ((=number? m1 1) m2)
+   ((=number? m2 1) m1)
+   ((and (numberp m1) (numberp m2)) (* m1 m2))
+   (t (list '* m1 m2))))
+
+(defun sum? (exp) (and (listp exp) (eq (car exp) '+)))
+
+(defun addend (s) (cadr s))
+
+(defun augend (s)
+  (if (= (length (cddr s)) 1)
+      (caddr s)
+    (cons '+ (cddr s))))
+
+(defun product? (exp) (and (listp exp) (eq (car exp) '*)))
+
+(defun multiplier (p) (cadr p))
+
+(defun multiplicand (p)
+  (if (= (length (cddr p)) 1)
+      (caddr p)
+    (cons '* (cddr p))))
+
+(defun exponentiation? (exp) (and (listp exp) (eq (car exp) '**)))
+
+(defun base (exp) (cadr exp))
+
+(defun exponent (exp) (caddr exp))
+
+(defun make-exponentiation (base exp)
+  (cond
+   ((= exp 1) base)
+   ((= exp 0) 1)
+   (t (list '** base exp))))
 
 
 ;; Local Variables:
