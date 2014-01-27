@@ -493,6 +493,151 @@
    ((= exp 0) 1)
    (t (list '** base exp))))
 
+;; 2.59
+(defun element-of? (x set)
+  (cond
+   ((null set) nil)
+   ((equal? x (car set)) t)
+   (t (element-of? x (cdr set)))))
+
+(defun adjoin-set (x set)
+  (if (element-of? x set) set
+    (cons x set)))
+
+(defun intersection-set (s1 s2)
+  (cond
+   ((or (null s1) (null s2)) nil)
+   ((element-of? (car s1) s2)
+    (cons (car s1) (intersection-set (cdr s1) s2)))
+   (t (intersection-set (cdr s1) s2))))
+
+(defun union-set (s1 s2)
+  (cond
+   ((null s1) s2)
+   ((null s2) s1)
+   ((element-of? (car s1) s2)
+    (union-set (cdr s1) s2))
+   (t (cons (car s1) (union-set (cdr s1) s2)))))
+
+;; 2.60
+(defun element-of2? (x set)
+  (cond
+   ((null set) nil)
+   ((= x (car set)) t)
+   ((< x (car set)) nil)
+   (t (element-of2? x (cdr set)))))
+
+(defun intersection-set2 (s1 s2)
+  (let ((x1 (car s1))
+        (x2 (car s2)))
+    (cond
+     ((or (null s1) (null s2)) nil)
+     ((= x1 x2)
+      (cons x1 (intersection-set2 (cdr s1) (cdr s2))))
+     ((< x1 x2)
+      (intersection-set2 (cdr s1) s2))
+     (t (intersection-set2 s1 (cdr s2))))))
+
+(defun adjoin-set2 (x set)
+  (cond
+   ((null set) (list x))
+   ((= x (car set)) set)
+   ((< x (car set)) (cons x set))
+   (t (cons (car set) (adjoin-set2 x (cdr set))))))
+
+(defun union-set2 (s1 s2)
+  (let ((x1 (car s1))
+        (x2 (car s2)))
+    (cond
+     ((null s1) s2)
+     ((null s2) s1)
+     ((< x1 x2)
+      (cons x1 (union-set2 (cdr s1) s2)))
+     ((> x1 x2)
+      (cons x2 (union-set2 s1 (cdr s2))))
+     (t (cons x1 (union-set2 (cdr s1) (cdr s2)))))))
+
+;; 2.61 2.62
+(defun entry (tree) (car tree))
+
+(defun branch-left (tree) (cadr tree))
+
+(defun branch-right (tree) (caddr tree))
+
+(defun make-tree (entry left right) (list entry left right))
+
+(defun element-of3? (x set)
+  (cond
+   ((null set) nil)
+   ((= x (entry set)) t)
+   ((< x (entry set)) (element-of3? x (branch-left set)))
+   (t (element-of3? x (branch-right set)))))
+
+(defun adjoin-set3 (x set)
+  (cond
+   ((null set) (make-tree x nil nil))
+   ((= x (entry set)) set)
+   ((< x (entry set))
+    (make-tree
+     (entry set)
+     (adjoin-set3 x (branch-left set))
+     (branch-right set)))
+   (t (make-tree
+       (entry set)
+       (branch-left set)
+       (adjoin-set3 x (branch-right set))))))
+
+;; 2.63 same result, tree->list2 more efficient
+(defun tree->list1 (tree)
+  (if (null tree) nil
+    (append (tree->list1 (branch-left tree))
+            (cons (entry tree)
+                  (tree->list1 (branch-right tree))))))
+
+(defun tree->list2 (tree)
+  (defun copy-to-list (tree result-list)
+    (if (null tree) result-list
+      (copy-to-list (branch-left tree)
+                    (cons (entry tree)
+                          (copy-to-list
+                           (branch-right tree)
+                           result-list)))))
+  (copy-to-list tree nil))
+
+;; 2.64
+(defun list->tree (elements)
+  (car (partial-tree elements (length elements))))
+(defun partial-tree (elts n)
+  (if (= n 0)
+      (cons nil elts)
+    (let* ((left-size (/ (- n 1) 2))
+           (left-result
+            (partial-tree elts left-size))
+           (left-tree (car left-result))
+           (non-left-elts (cdr left-result))
+           (right-size (- n (+ 1 left-size)))
+           (this-entry (car non-left-elts))
+           (right-result
+            (partial-tree
+             (cdr non-left-elts)
+             right-size))
+           (right-tree (car right-result))
+           (remaining-elts (cdr right-result)))
+      (cons (make-tree this-entry
+                       left-tree
+                       right-tree)
+            remaining-elts))))
+
+;; 2.65
+(defun union-set3 (s1 s2)
+  (let* ((lst1 (tree->list2 s1))
+         (lst2 (tree->list2 s2)))
+    (list->tree (union-set2 lst1 lst2))))
+
+(defun intersection-set3 (s1 s2)
+  (let* ((lst1 (tree->list2 s1))
+         (lst2 (tree->list2 s2)))
+    (list->tree (intersection-set2 lst1 lst2))))
 
 ;; Local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
