@@ -639,6 +639,118 @@
          (lst2 (tree->list2 s2)))
     (list->tree (intersection-set2 lst1 lst2))))
 
+;; 2.67
+(defun make-leaf (symbol weight) (list 'leaf symbol weight))
+
+(defun leaf? (object) (eq (car object) 'leaf))
+
+(defun symbol-leaf (x) (cadr x))
+
+(defun weight-leaf (x) (caddr x))
+
+(defun make-code-tree (left right)
+  (list left
+        right
+        (append (symbols left) (symbols right))
+        (+ (weight left) (weight right))))
+
+(defun hft-left (tree) (car tree))
+
+(defun hft-right (tree) (cadr tree))
+
+(defun symbols (tree)
+    (if (leaf? tree)
+        (list (symbol-leaf tree))
+      (caddr tree)))
+
+(defun weight (tree)
+  (if (leaf? tree)
+      (weight-leaf tree)
+    (cadddr tree)))
+
+(defun decode (bits tree)
+  (defun decode-1 (bits current-branch)
+    (if (null bits)
+        nil
+      (let ((next-branch
+             (choose-branch (car bits) current-branch)))
+        (if (leaf? next-branch)
+            (cons (symbol-leaf next-branch)
+                  (decode-1 (cdr bits) tree))
+          (decode-1 (cdr bits) next-branch)))))
+  (decode-1 bits tree))
+
+(defun choose-branch (bit branch)
+  (cond
+   ((= bit 1) (hft-right branch))
+   ((= bit 0) (hft-left branch))
+   (t (error "bad bit"))))
+
+(defun hft-adjoin-set (x set)
+  (cond
+   ((null set) (list x))
+   ((< (weight x) (weight (car set))) (cons x set))
+   (t (cons (car set) (hft-adjoin-set x (cdr set))))))
+
+(defun make-leaf-set (pairs)
+  (if (null pairs)
+      nil
+    (let ((pair (car pairs)))
+      (hft-adjoin-set (make-leaf (car pair)
+                                 (cadr pair))
+                      (make-leaf-set (cdr pairs))))))
+(setq sample-tree
+      (make-code-tree (make-leaf 'A 4)
+                      (make-code-tree
+                       (make-leaf 'B 2)
+                       (make-code-tree
+                        (make-leaf 'D 1)
+                        (make-leaf 'C 1)))))
+(setq sample-message '(0 1 1 0 0 1 0 1 0 1 1 1 0))
+
+;; 2.68
+(defun encode (message tree)
+  (if (null message)
+      nil
+    (append (encode-symbol (car message) tree)
+            (encode (cdr message) tree))))
+
+(defun encode-symbol (sym tree)
+  (if (memq sym (symbols tree))
+      (if (leaf? tree)
+          nil
+        (let* ((left-branch (hft-left tree))
+               (left-symbols (symbols left-branch))
+               (right-branch (hft-right tree))
+               (right-symbols (symbols right-branch)))
+          (cond
+           ((memq sym left-symbols)
+            (cons 0 (encode-symbol sym left-branch)))
+           ((memq sym right-symbols)
+            (cons 1 (encode-symbol sym right-branch))))))
+    (error "Symbol not in the tree")))
+
+;; 2.69
+(defun generate-huffman-tree (pairs)
+  (successive-merge (make-leaf-set pairs)))
+
+(defun successive-merge (set)
+  (if (= 1 (length set))
+      (car set)
+    (let ((new-node (make-code-tree (car set) (cadr set))))
+      (successive-merge (hft-adjoin-set new-node (cddr set))))))
+
+;; 2.70
+;; (setq lyric-tree (generate-huffman-tree '((A 2) (GET 2) (SHA 3)
+;;                                         (WAH 1) (BOOM 1) (JOB 1)
+;;                                         (NA 16) (YIP 9))))
+;; (length (encode '(GET A JOB SHA NA NA NA NA NA NA NA NA GET A JOB
+;;                       SHA NA NA NA NA NA NA NA NA
+;;                       WAH YIP YIP YIP YIP YIP YIP YIP YIP YIP
+;;                       SHA BOOM) lyric-tree))
+
+
+
 ;; Local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
 ;; End:
