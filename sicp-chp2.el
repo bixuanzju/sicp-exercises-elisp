@@ -699,14 +699,14 @@
       (hft-adjoin-set (make-leaf (car pair)
                                  (cadr pair))
                       (make-leaf-set (cdr pairs))))))
-(setq sample-tree
-      (make-code-tree (make-leaf 'A 4)
-                      (make-code-tree
-                       (make-leaf 'B 2)
-                       (make-code-tree
-                        (make-leaf 'D 1)
-                        (make-leaf 'C 1)))))
-(setq sample-message '(0 1 1 0 0 1 0 1 0 1 1 1 0))
+;; (setq sample-tree
+;;       (make-code-tree (make-leaf 'A 4)
+;;                       (make-code-tree
+;;                        (make-leaf 'B 2)
+;;                        (make-code-tree
+;;                         (make-leaf 'D 1)
+;;                         (make-leaf 'C 1)))))
+;; (setq sample-message '(0 1 1 0 0 1 0 1 0 1 1 1 0))
 
 ;; 2.68
 (defun encode (message tree)
@@ -748,6 +748,7 @@
 ;;                       SHA NA NA NA NA NA NA NA NA
 ;;                       WAH YIP YIP YIP YIP YIP YIP YIP YIP YIP
 ;;                       SHA BOOM) lyric-tree))
+
 
 
 
