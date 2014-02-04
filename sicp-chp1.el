@@ -223,8 +223,8 @@
 
 (defun fixed-point (f first-guess)
   (defun close-enough? (v1 v2)
-      (< (abs (- v1 v2))
-         sicp-tolerance))
+    (< (abs (- v1 v2))
+       sicp-tolerance))
   (defun try (guess)
     (let ((next (funcall f guess)))
       (if (close-enough? next guess)
