@@ -180,6 +180,260 @@
 ;;       (make-joint peter-acc 'open-sesame 'rousebud))
 ;; (funcall (funcall peter-acc 'ronusebud 'withdraw) 30)
 
+(defun last-pair (x)
+  (if (null (cdr x)) x (last-pair (cdr x))))
+
+(defun make-cycle (x)
+  (setcdr (last-pair x) x)
+  x)
+
+;; 3.14
+(defun mystery (x)
+  (defun myloop (x y)
+    (if (null x)
+        y
+      (let ((temp (cdr x)))
+        (setcdr x y)
+        (myloop temp x))))
+  (myloop x '()))
+
+
+;; 3.16
+(defun count-pair (x)
+  (if (not (consp x))
+      0
+    (+ (count-pair (car x))
+       (count-pair (cdr x))
+       1)))
+
+;; 3.17
+(defun count-pair-c (x)
+  (let ((temp '()))
+    (defun iter (xs)
+      (cond
+       ((not (consp xs)) 0)
+       ((memq xs temp) 0)
+       (t (setq temp (cons xs temp))
+          (+ 1
+             (iter (car xs))
+             (iter (cdr xs))))))
+    (iter x)))
+
+;; (setq a '(1))
+;; (setq b (cons a a))
+;; (setq c (cons b b))
+
+;; 3.18
+(defun detect-cycle (x)
+  (let ((temp '()))
+    (defun iter (xs)
+      (cond
+       ((null xs) nil)
+       ((memq xs temp) t)
+       (t (setq temp (cons xs temp))
+          (iter (cdr xs)))))
+    (iter x)))
+
+(setq a (make-cycle '(1 2 3 4)))
+
+;; 3.19
+(defun detect-cycle-clever (x)
+  (defun iter (a b)
+    (cond
+     ((eq a b) t)
+     ((or (null a) (null b)) nil)
+     (t (iter (cdr-safe a) (cdr-safe (cdr-safe b))))))
+  (iter x (cdr-safe x)))
+
+;; 3.21
+(defun front-ptr (queue)
+  (car queue))
+
+(defun rear-ptr (queue)
+  (cdr queue))
+
+(defun set-front-ptr! (queue item)
+  (setcar queue item))
+
+(defun set-rear-ptr! (queue item)
+  (setcdr queue item))
+
+(defun empty-queue? (queue)
+  (null (front-ptr queue)))
+
+(defun make-queue ()
+  (cons '() '()))
+
+(defun front-queue (queue)
+  (if (empty-queue? queue)
+      (error "FRONT called with an empty queue")
+    (car (front-ptr queue))))
+
+(defun insert-queue! (queue item)
+  (let ((new-pair (cons item '())))
+    (cond
+     ((empty-queue? queue)
+      (set-front-ptr! queue new-pair)
+      (set-rear-ptr! queue new-pair)
+      queue)
+     (t
+      (setcdr (rear-ptr queue) new-pair)
+      (set-rear-ptr! queue new-pair)
+      queue))))
+
+(defun delete-queue! (queue)
+  (cond
+   ((empty-queue? queue)
+    (error "DELETE called with an empty queue"))
+   (t
+    (set-front-ptr! queue (cdr (front-ptr queue)))
+    queue)))
+
+(defun print-queue (queue)
+  (front-ptr queue))
+
+(setq q1 (make-queue))
+(print-queue (insert-queue! q1 'a))
+(print-queue (insert-queue! q1 'b))
+(print-queue (delete-queue! q1))
+(print-queue (delete-queue! q1))
+
+;; 3.22
+(defun make-queue2 ()
+  (let ((front-ptr '())
+        (rear-ptr '()))
+    (defun empty-queue? ()
+      (null front-ptr))
+    (defun front-queue ()
+      (if (empty-queue?)
+          (error "FRONT called with an empty queue")
+        (car front-ptr)))
+    (defun insert-queue! (item)
+      (let ((new-pair (cons item '())))
+        (cond
+         ((empty-queue?)
+          (setq front-ptr new-pair)
+          (setq rear-ptr new-pair))
+         (t (setcdr rear-ptr new-pair)
+            (setq rear-ptr new-pair)))))
+    (defun delete-queue! ()
+      (cond
+       ((empty-queue?)
+        (error "DELETE called with an empty queue"))
+       (t (setq front-ptr (cdr front-ptr)))))
+    (defun dispatch (m)
+      (cond
+       ((eq m 'make-queue) #'make-queue)
+       ((eq m 'empty-queue?) #'empty-queue?)
+       ((eq m 'front-queue) #'front-queue)
+       ((eq m 'insert-queue!) #'insert-queue!)
+       ((eq m 'delete-queue!) #'delete-queue!)
+       (t (error "Unknown command"))))
+    #'dispatch))
+
+(defun empty-queue2? (queue)
+  (funcall (funcall queue 'empty-queue?)))
+
+(defun front-queue2 (queue)
+  (funcall (funcall queue 'front-queue)))
+
+(defun insert-queue2! (queue item)
+  (funcall (funcall queue 'insert-queue!) item))
+
+(defun delete-queue2! (queue)
+  (funcall (funcall queue 'delete-queue!)))
+
+;; (setq q1 (make-queue2))
+;; (insert-queue2! q1 'a)
+;; (insert-queue2! q1 'b)
+;; (front-queue2 q1)
+;; (delete-queue2! q1)
+
+;; 3.23: use double-linked list
+(defun front-ptr-de (dq)
+  (car dq))
+(defun rear-ptr-de (dq)
+  (cdr dq))
+(defun set-front-ptr-de! (dq item)
+  (setcar dq item))
+(defun set-rear-ptr-de! (dq item)
+  (setcdr dq item))
+(defun empty-deque? (dq)
+  (null (front-ptr-de dq)))
+(defun make-deque ()
+  (cons '() '()))
+(defun front-deque (dq)
+  (if (empty-deque? dq)
+      (error "FRONT called with an empty deque")
+    (caar (front-ptr-de dq))))
+(defun rear-deque (dq)
+  (if (empty-deque? dq)
+      (error "REAR called with an empty deque")
+    (caar (rear-ptr-de dq))))
+(defun front-insert-deque! (dq item)
+  (let ((new-pair (cons (cons item nil) nil)))
+    (cond
+     ((empty-deque? dq)
+      (set-front-ptr-de! dq new-pair)
+      (set-rear-ptr-de! dq new-pair)
+      dq)
+     (t
+      (setcdr new-pair (front-ptr-de dq))
+      (setcdr (car (front-ptr-de dq)) new-pair)
+      (set-front-ptr-de! dq new-pair)
+      dq))))
+(defun rear-insert-deque! (dq item)
+  (let ((new-pair (cons (cons item nil) nil)))
+    (cond
+     ((empty-deque? dq)
+      (set-front-ptr-de! dq new-pair)
+      (set-rear-ptr-de! dq new-pair)
+      dq)
+     (t
+      (setcdr (rear-ptr-de dq) new-pair)
+      (setcdr (car new-pair) (rear-ptr-de dq))
+      (set-rear-ptr-de! dq new-pair)
+      dq))))
+(defun front-delete-deque! (dq)
+  (cond
+   ((empty-deque? dq)
+    (error "DELETE called with an empty deque"))
+   ((eq (front-ptr-de dq) (rear-ptr-de dq))
+    (setcar dq nil)
+    (setcdr dq nil)
+    dq)
+   (t
+    (set-front-ptr-de! dq (cdr (front-ptr-de dq)))
+    (setcdr (car (front-ptr-de dq)) nil)
+    dq)))
+(defun rear-delete-deque! (dq)
+  (cond
+   ((empty-deque? dq)
+    (error "DELETE called with an empty deque"))
+   ((eq (front-ptr-de dq) (rear-ptr-de dq))
+    (setcar dq nil)
+    (setcdr dq nil)
+    dq)
+   (t
+    (set-rear-ptr-de! dq (cdar (rear-ptr-de dq)))
+    (setcdr (rear-ptr-de dq) nil)
+    dq)))
+(defun print-deque (dq)
+  (defun iter (ptr lst)
+    (if (null ptr) (reverse lst)
+      (iter (cdr ptr) (cons (caar ptr) lst))))
+  (iter (front-ptr-de dq) '()))
+
+;; (setq dq1 (make-deque))
+;; (front-insert-deque! dq1 'a)
+;; (rear-insert-deque! dq1 'b)
+;; (rear-insert-deque! dq1 'c)
+;; (print-deque dq1)
+;; (front-deque dq1)
+;; (rear-delete-deque! dq1)
+;; (front-delete-deque! dq1)
+
+;;
 
 
 ;; local Variables:
