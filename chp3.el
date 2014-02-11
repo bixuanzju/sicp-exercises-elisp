@@ -437,7 +437,6 @@
 
 
 
-
 (defun assoc (key records)
   (cond
    ((null records) nil)
@@ -446,31 +445,6 @@
 
 (defun make-table ()
   (cons 'table nil))
-
-(defun lookup-2d (key1 key2 table)
-  (let ((subtable (assoc key1 (cdr table))))
-    (if subtable
-        (let ((record (assoc key2 (cdr subtable))))
-          (if record (cdr record) nil))
-      nil)))
-
-(defun insert-2d! (key1 key2 value table)
-  (let ((subtable (assoc key1 (cdr table))))
-    (if subtable
-        (let ((record (assoc key2 (cdr subtable))))
-          (if record
-              (setcdr record value)
-            (setcdr subtable
-                    (cons (cons key2 value) (cdr subtable)))))
-      (setcdr table
-              (cons (list key1 (cons key2 value))
-                    (cdr table)))))
-  'ok)
-
-;; (setq t2 (make-table))
-;; (insert-2d! 'a 1 2 t2)
-;; (insert-2d! 'a 2 3 t2)
-;; (lookup-2d 'a 2 t2)
 
 ;; 3.24
 (defun make-table-local (same-key?)
