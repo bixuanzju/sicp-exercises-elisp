@@ -245,6 +245,7 @@
      (t (iter (cdr-safe a) (cdr-safe (cdr-safe b))))))
   (iter x (cdr-safe x)))
 
+
 ;; 3.21
 (defun front-ptr (queue)
   (car queue))
@@ -349,6 +350,7 @@
 ;; (front-queue2 q1)
 ;; (delete-queue2! q1)
 
+
 ;; 3.23: use double-linked list
 (defun front-ptr-de (dq)
   (car dq))
@@ -433,8 +435,134 @@
 ;; (rear-delete-deque! dq1)
 ;; (front-delete-deque! dq1)
 
-;;
+
 
+
+(defun assoc (key records)
+  (cond
+   ((null records) nil)
+   ((equal (caar records) key) (car records))
+   (t (assoc key (cdr records)))))
+
+(defun make-table ()
+  (cons 'table nil))
+
+(defun lookup-2d (key1 key2 table)
+  (let ((subtable (assoc key1 (cdr table))))
+    (if subtable
+        (let ((record (assoc key2 (cdr subtable))))
+          (if record (cdr record) nil))
+      nil)))
+
+(defun insert-2d! (key1 key2 value table)
+  (let ((subtable (assoc key1 (cdr table))))
+    (if subtable
+        (let ((record (assoc key2 (cdr subtable))))
+          (if record
+              (setcdr record value)
+            (setcdr subtable
+                    (cons (cons key2 value) (cdr subtable)))))
+      (setcdr table
+              (cons (list key1 (cons key2 value))
+                    (cdr table)))))
+  'ok)
+
+;; (setq t2 (make-table))
+;; (insert-2d! 'a 1 2 t2)
+;; (insert-2d! 'a 2 3 t2)
+;; (lookup-2d 'a 2 t2)
+
+;; 3.24
+(defun make-table-local (same-key?)
+  (let ((local-table (list 'table)))
+    (defun assoc (key records)
+      (cond
+       ((null records) nil)
+       ((funcall same-key? (caar records) key) (car records))
+       (t (assoc key (cdr records)))))
+    (defun lookup (key1 key2)
+      (let ((subtable (assoc key1 (cdr local-table))))
+        (if subtable
+            (let ((record (assoc key2 (cdr subtable))))
+              (if record (cdr record) nil))
+          nil)))
+    (defun insert! (key1 key2 value)
+      (let ((subtable (assoc key1 (cdr local-table))))
+        (if subtable
+            (let ((record (assoc key2 (cdr subtable))))
+              (if record
+                  (setcdr record value)
+                (setcdr subtable
+                        (cons (cons key2 value) (cdr subtable)))))
+          (setcdr local-table
+                  (cons (list key1 (cons key2 value))
+                        (cdr local-table)))))
+      'ok)
+    (defun dispatch (m)
+      (cond
+       ((eq m 'lookup-proc) #'lookup)
+       ((eq m 'insert-proc!) #'insert!)
+       (t (error "Unknown operation"))))
+    #'dispatch))
+
+;; 3.25
+(defun foldl (op acc lst)
+  (cond
+   ((null lst) acc)
+   (t (foldl op (funcall op acc (car lst)) (cdr lst)))))
+
+(defun make-table-g ()
+  (let ((local-table (list '*table*)))
+    (defun lookup (key-lst)
+      (foldl
+       (lambda (records key)
+         (cond
+          ((null records) nil)
+          ((consp records)
+           (let ((record (assoc key records)))
+             (if record (cdr record) nil)))
+          (t nil)))
+       (cdr local-table)
+       key-lst))
+    (defun iter (subtable keys)
+      (cond
+       ((null keys)
+        (cons subtable nil))
+       ((consp (cdr subtable))
+        (cons subtable keys))
+       (t (let ((record (assoc (car keys) (cdr subtable))))
+            (if record
+                (iter record (cdr keys))
+              (cons subtable keys))))))
+    (defun make-new (keys value)
+      (if (null (cdr keys))
+          (cons (car keys) value)
+        (list (car keys) (make-new (cdr keys) value))))
+    (defun insert! (key-lst value)
+      (let ((last-table (car (iter local-table key-lst)))
+            (last-keys (cdr (iter local-table key-lst))))
+        (if (null last-keys)
+            (setcdr last-table value)
+          (setcdr last-table (cons (make-new last-keys value)
+                                   (cdr last-table)))))
+      'ok)
+    (defun dispatch (m)
+      (cond
+       ((eq m 'lookup-proc) #'lookup)
+       ((eq m 'insert-proc!) #'insert!)
+       (t (error "Unknown operation"))))
+    #'dispatch))
+
+;; (setq t2 (make-table-g))
+;; (setq get-value (funcall t2 'lookup-proc))
+;; (setq put-value (funcall t2 'insert-proc!))
+
+;; (funcall put-value '(1 2 3) 4)
+;; (funcall put-value '(1 2 5 6) 7)
+;; (funcall put-value '(1 2 5) 0)
+;; (funcall get-value '(1 2 5 6))
+
+;; 3.26
 
 ;; local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
