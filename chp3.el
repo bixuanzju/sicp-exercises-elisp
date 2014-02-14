@@ -69,13 +69,12 @@
       "Insufficient funds"))
   (defun deposit (amount)
     (setq balance (+ balance amount)))
-  (defun dispatch (secret m)
+  (lambda (secret m)
     (if (eq secret pwd)
         (cond ((eq m 'withdraw) #'withdraw)
               ((eq m 'deposit) #'deposit)
               (t (error "Unknown request")))
-      (lambda (_) "Incorrect password")))
-  #'dispatch)
+      (lambda (_) "Incorrect password"))))
 
 ;; (fset 'acc (make-account 100 'secret-password))
 ;; (funcall (acc 'secret-password 'withdraw) 40)
@@ -92,7 +91,7 @@
         "Insufficient funds"))
     (defun deposit (amount)
       (setq balance (+ balance amount)))
-    (defun dispatch (secret m)
+    (lambda (secret m)
       (if (eq secret pwd)
           (cond ((eq m 'withdraw) (setq time 0) #'withdraw)
                 ((eq m 'deposit) (setq time 0) #'deposit)
@@ -104,8 +103,7 @@
                 (error "I am calling the police"))
             (progn
               (setq time (1+ time))
-              "Incorrect password")))))
-    #'dispatch))
+              "Incorrect password")))))))
 
 ;; (fset 'acc (make-account2 100 'secret-password))
 ;; (funcall (acc 'secret-password 'withdraw) 40)
@@ -158,14 +156,13 @@
     (setq balance (+ balance amount)))
   (defun add-pwd (npwd)
     (add-to-list 'pwds npwd))
-  (defun dispatch (secret m)
+  (lambda (secret m)
     (if (memq secret pwds)
         (cond ((eq m 'withdraw) #'withdraw)
               ((eq m 'deposit) #'deposit)
               ((eq m 'add-pwd) #'add-pwd)
               (t (error "Unknown request")))
-      (lambda (_) "Incorrect password")))
-  #'dispatch)
+      (lambda (_) "Incorrect password"))))
 
 ;; (setq peter-acc (make-account3 100 'open-sesame))
 ;; (funcall (funcall peter-acc 'open-sesame 'deposit) 30)
@@ -322,15 +319,14 @@
        ((empty-queue?)
         (error "DELETE called with an empty queue"))
        (t (setq front-ptr (cdr front-ptr)))))
-    (defun dispatch (m)
+    (lambda (m)
       (cond
        ((eq m 'make-queue) #'make-queue)
        ((eq m 'empty-queue?) #'empty-queue?)
        ((eq m 'front-queue) #'front-queue)
        ((eq m 'insert-queue!) #'insert-queue!)
        ((eq m 'delete-queue!) #'delete-queue!)
-       (t (error "Unknown command"))))
-    #'dispatch))
+       (t (error "Unknown command"))))))
 
 (defun empty-queue2? (queue)
   (funcall (funcall queue 'empty-queue?)))
@@ -472,12 +468,11 @@
                   (cons (list key1 (cons key2 value))
                         (cdr local-table)))))
       'ok)
-    (defun dispatch (m)
+    (lambda (m)
       (cond
        ((eq m 'lookup-proc) #'lookup)
        ((eq m 'insert-proc!) #'insert!)
-       (t (error "Unknown operation"))))
-    #'dispatch))
+       (t (error "Unknown operation"))))))
 
 ;; 3.25
 (defun foldl (op acc lst)
@@ -520,12 +515,11 @@
           (setcdr last-table (cons (make-new last-keys value)
                                    (cdr last-table)))))
       'ok)
-    (defun dispatch (m)
+    (lambda (m)
       (cond
        ((eq m 'lookup-proc) #'lookup)
        ((eq m 'insert-proc!) #'insert!)
-       (t (error "Unknown operation"))))
-    #'dispatch))
+       (t (error "Unknown operation"))))))
 
 ;; (setq t2 (make-table-g))
 ;; (setq get-value (funcall t2 'lookup-proc))
@@ -537,6 +531,250 @@
 ;; (funcall get-value '(1 2 5 6))
 
 ;; 3.26
+(defun make-table-b ()
+  (let ((local-table))
+    (defun entry (tree) (car tree))
+    (defun branch-left (tree) (cadr tree))
+    (defun branch-right (tree) (caddr tree))
+    (defun make-tree (entry left right) (list entry left right))
+    (defun lookup (key)
+      (defun lookup-iter (table)
+        (cond ((null table)
+               nil)
+              ((= (car (entry table))
+                  key)
+               (cdr (entry table)))
+              ((> (car (entry table))
+                  key)
+               (lookup-iter (branch-right table)))
+              (t (lookup-iter (branch-left table)))))
+      (lookup-iter local-table))
+    (defun insert! (key value)
+      (defun insert-iter (table)
+        (cond
+         ((null table)
+          (make-tree (cons key value) nil nil))
+         ((= (car (entry table)) key)
+          (setcdr (entry table) value)
+          table)
+         ((> (car (entry table)) key)
+          (make-tree (entry table)
+                     (branch-left table)
+                     (insert-iter (branch-right table))))
+         (t (make-tree
+             (entry table)
+             (insert-iter (branch-left table))
+             (branch-right table)))))
+      (setq local-table (insert-iter local-table))
+      'ok)
+    (lambda (m)
+      (cond
+       ((eq m 'lookup-proc) #'lookup)
+       ((eq m 'insert-proc!) #'insert!)
+       (t (error "Unknown operation"))))))
+
+;; (setq t1 (make-table-b))
+;; (setq t2 (make-table-b))
+;; (setq get-value (funcall t1 'lookup-proc))
+;; (setq set-value (funcall t1 'insert-proc!))
+;; (funcall set-value 2 4)
+;; (funcall set-value 7 9)
+;; (funcall set-value 1 5)
+;; (funcall get-value 1)
+
+
+(defun inverter (input output)
+  (defun invert-input ()
+    (let ((new-value (logical-not (get-signal input))))
+      (after-delay inverter-delay
+                   (lambda () (set-signal! output new-value)))))
+  (add-action! input #'invert-input)
+  'ok)
+(defun logical-not (s)
+  (cond
+   ((= s 0) 1)
+   ((= s 1) 0)
+   (t (error "Invalid signal"))))
+
+(defun and-gate (a1 a2 output)
+  (defun add-action-procedure ()
+    (let ((new-value
+           (logical-and (get-signal a1) (get-signal a2))))
+      (after-delay and-gate-delay
+                   (lambda () (set-signal! output new-value)))))
+  (add-action! a1 #'add-action-procedure)
+  (add-action! a2 #'add-action-procedure)
+  'ok)
+(defun logical-and (a1 a2)
+  (cond
+   ((= a1 0) 0)
+   ((= a2 0) 0)
+   (t 1)))
+
+(defun half-adder (a b s c)
+  (let ((d (make-wire)) (e (make-wire)))
+    (or-gate a b d)
+    (and-gate a b c)
+    (inverter c e)
+    (and-gate d e s)
+    'ok))
+
+(defun full-adder (a b c-in sum c-out)
+  (let ((s (make-wire)) (c1 (make-wire)) (c2 (make-wire)))
+    (half-adder b c-in s c1)
+    (half-adder a s sum c2)
+    (or-gate c1 c2 c-out)
+    'ok))
+
+;; 3.28
+(defun or-gate (a1 a2 output)
+  (defun or-action-procedure ()
+    (let ((new-value
+           (logical-or (get-signal a1) (get-signal a2))))
+      (after-delay or-gate-delay
+                   (lambda () (set-signal! output new-value)))))
+  (add-action! a1 #'or-action-procedure)
+  (add-action! a2 #'or-action-procedure)
+  'ok)
+(defun logical-or (a1 a2)
+  (cond
+   ((= a1 1) 1)
+   ((= a2 1) 1)
+   (t 0)))
+
+;; 3.29
+(defun or-gate2 (a b output)
+  (let ((a1 (make-wire)) (b1 (make-wire)) (c (make-wire)))
+    (inverter a a1)
+    (inverter b b1)
+    (and-gate a1 b1 c)
+    (inverter c output)
+    'ok))
+
+
+;; 3.30
+(defun ripple-carry (an bn sn c)
+  (let ((c-out (make-wire)))
+    (when (and (consp an)
+               (consp bn)
+               (consp sn))
+      (full-adder (car an) (car bn) (car sn) c c-out)
+      (ripple-carry (cdr an) (cdr bn) (cdr sn) c-out))
+    'ok))
+
+
+(defun make-wire ()
+  (let ((signal-value 0)
+        (action-procedures '()))
+    (defun set-my-signal! (new-value)
+      (if (not (= signal-value new-value))
+          (progn
+            (setq signal-value new-value)
+            (call-each action-procedures))
+        'done))
+    (defun accept-action-procedure! (proc)
+      (setq action-procedures
+            (cons proc action-procedures))
+      (funcall proc))
+    (lambda (m)
+      (cond ((eq m 'get-signal) signal-value)
+            ((eq m 'set-signal!) #'set-my-signal!)
+            ((eq m 'add-action!) #'accept-action-procedure!)
+            ((eq m 'show-procedures) action-procedures)
+            (t (error "Unknown operation: WIRE"))))))
+
+(defun call-each (procedures)
+  (if (null procedures)
+      'done
+    (progn
+      (funcall (car procedures))
+      (call-each (cdr procedures)))))
+(defun get-signal (wire) (funcall wire 'get-signal))
+(defun show-inner-procedures (wire) (funcall wire 'show-procedures))
+(defun set-signal! (wire new-value)
+  (funcall (funcall wire 'set-signal!) new-value))
+(defun add-action! (wire action-procedure)
+  (funcall (funcall wire 'add-action!) action-procedure))
+
+(defun after-delay (delay action)
+  (add-to-agenda! (+ delay (current-simulation-time the-agenda))
+                  action
+                  the-agenda))
+(defun propagate ()
+  (if (empty-agenda? the-agenda)
+      'done
+    (let ((first-item (first-agenda-item the-agenda)))
+      (funcall first-item)
+      (remove-first-agenda-item! the-agenda)
+      (propagate))))
+
+(defun probe (name wire)
+  (add-action! wire
+               (lambda ()
+                 (message "%s %d New-value = %d"
+                          name
+                          (current-simulation-time the-agenda)
+                          (get-signal wire)))))
+
+
+(defun make-time-segment (time queue)
+  (cons time queue))
+(defun segment-time (s) (car s))
+(defun segment-queue (s) (cdr s))
+
+(defun make-agenda ()
+  (list 0))
+(defun current-simulation-time (agenda) (car agenda))
+(defun set-current-time! (agenda time)
+  (setcar agenda time))
+(defun segments (agenda) (cdr agenda))
+(defun set-segments! (agenda segments)
+  (setcdr agenda segments))
+(defun first-segment (agenda) (car (segments agenda)))
+(defun rest-segments (agenda) (cdr (segments agenda)))
+(defun empty-agenda? (agenda) (null (segments agenda)))
+
+;; 3.31 to install the action in the agenda
+
+(defun add-to-agenda! (time action agenda)
+  (defun belongs-before? (segments)
+    (or (null segments)
+        (< time (segment-time (car segments)))))
+  (defun make-new-time-segment (time action)
+    (let ((q (make-queue)))
+      (insert-queue! q action)
+      (make-time-segment time q)))
+  (defun add-to-segments! (segments)
+    (if (= (segment-time (car segments)) time)
+        (insert-queue! (segment-queue (car segments))
+                       action)
+      (let ((rest (cdr segments)))
+        (if (belongs-before? rest)
+            (setcdr segments
+                    (cons (make-new-time-segment time action)
+                          (cdr segments)))
+          (add-to-segments! rest)))))
+  (let ((segments (segments agenda)))
+    (if (belongs-before? segments)
+        (set-segments!
+         agenda
+         (cons (make-new-time-segment time action)
+               segments))
+      (add-to-segments! segments))))
+
+(defun remove-first-agenda-item! (agenda)
+  (let ((q (segment-queue (first-segment agenda))))
+    (delete-queue! q)
+    (if (empty-queue? q)
+        (set-segments! agenda (rest-segments agenda)))))
+(defun first-agenda-item (agenda)
+  (if (empty-agenda? agenda)
+      (error "Agenda is empty")
+    (let ((first-seg (first-segment agenda)))
+      (set-current-time! agenda (segment-time first-seg))
+      (front-queue (segment-queue first-seg)))))
+
+
 
 ;; local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
