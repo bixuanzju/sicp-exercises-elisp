@@ -57,14 +57,15 @@
   (= (% a 2) 0))
 
 (defun fast-exp-iter (b n)
-  (defun iter (a base count)
-    "Use invariant quantity a*base^count,this is a powerful technique when
-     designing iterative algorithms."
-    (cond
-     ((= count 0) a)
-     ((even? count) (iter a (* base base) (/ count 2)))
-     (t (iter (* a base) base (- count 1)))))
-  (iter 1 b n))
+  "Use invariant quantity a*base^count,this is
+a powerful technique when designing iterative algorithms."
+  (cl-labels
+      ((iter (a base count)
+             (cond
+              ((= count 0) a)
+              ((even? count) (iter a (* base base) (/ count 2)))
+              (t (iter (* a base) base (- count 1))))))
+    (iter 1 b n)))
 
 ;; 1.17
 (defun double (n)
@@ -80,13 +81,14 @@
 
 ;; 1.18
 (defun log-multi-iter (a b)
-  (defun iter (s a b)
-    "Use invariant quantity s+ab"
-    (cond
-     ((= b 0) s)
-     ((even? b) (iter s (double a) (halve b)))
-     (t (iter (+ s a) a (- b 1)))))
-  (iter 0 a b))
+  "Use invariant quantity s+ab"
+  (cl-labels
+      ((iter (s a b)
+             (cond
+              ((= b 0) s)
+              ((even? b) (iter s (double a) (halve b)))
+              (t (iter (+ s a) a (- b 1))))))
+    (iter 0 a b)))
 
 ;; 1.19
 (defun fib (n)
@@ -144,10 +146,11 @@
 
 ;; 1.30
 (defun sum-iter (term a next b)
-  (defun iter (a result)
-    (if (> a b) result
-      (iter (funcall next a) (+ result (funcall term a)))))
-  (iter a 0))
+  (cl-labelss
+   ((iter (a result)
+          (if (> a b) result
+            (iter (funcall next a) (+ result (funcall term a))))))
+   (iter a 0)))
 
 ;; 1.31
 (defun product (term a next b)
@@ -162,10 +165,11 @@
     (* (/ 8 (float 3)) (product f 4 (lambda (n) (+ n 2)) (* n 2)))))
 
 (defun product-iter (term a next b)
-  (defun iter (a result)
-    (if (> a b) result
-      (iter (funcall next a) (* result (funcall term a)))))
-  (iter a 1))
+  (cl-labels
+      ((iter (a result)
+             (if (> a b) result
+               (iter (funcall next a) (* result (funcall term a))))))
+    (iter a 1)))
 
 ;; 1.32
 (defun accumulate (combiner null-value term a next b)
@@ -181,10 +185,11 @@
   (accumulate '* 1 term a next b))
 
 (defun accumulate-iter (combiner null-value term a next b)
-  (defun iter (a result)
-    (if (> a b) result
-      (iter (funcall next a) (funcall combiner result (funcall term a)))))
-  (iter a null-value))
+  (cl-labels
+      ((iter (a result)
+             (if (> a b) result
+               (iter (funcall next a) (funcall combiner result (funcall term a))))))
+    (iter a null-value)))
 
 (defun fold-l (f acc l)
   (if (null l) acc
@@ -222,30 +227,32 @@
 (defconst sicp-tolerance 0.00001)
 
 (defun fixed-point (f first-guess)
-  (defun close-enough? (v1 v2)
-    (< (abs (- v1 v2))
-       sicp-tolerance))
-  (defun try (guess)
-    (let ((next (funcall f guess)))
-      (if (close-enough? next guess)
-          next
-        (try next))))
-  (try first-guess))
+  (cl-labels
+      ((close-enough? (v1 v2)
+                      (< (abs (- v1 v2))
+                         sicp-tolerance))
+       (try (guess)
+            (let ((next (funcall f guess)))
+              (if (close-enough? next guess)
+                  next
+                (try next)))))
+    (try first-guess)))
 
 (defconst golden-ratio (fixed-point (lambda (x) (+ 1 (/ 1 x))) 1.0))
 
 ;; 1.36
 (defun fixed-point-print (f first-guess)
-  (defun close-enough? (v1 v2)
-    (< (abs (- v1 v2))
-       sicp-tolerance))
-  (defun try (guess)
-    (let ((next (funcall f guess)))
-      (if (close-enough? next guess)
-          next
-        (message "%s" next)
-        (try next))))
-  (try first-guess))
+  (cl-labels
+      ((close-enough? (v1 v2)
+                      (< (abs (- v1 v2))
+                         sicp-tolerance))
+       (try (guess)
+            (let ((next (funcall f guess)))
+              (if (close-enough? next guess)
+                  next
+                (message "%s" next)
+                (try next)))))
+    (try first-guess)))
 
 ;; (fixed-point-print (lambda (x) (/ (log 1000) (log x))) 5.0)
 
@@ -253,14 +260,12 @@
 
 ;; 1.37
 (defun cont-frac (n d k)
-  (defun iter (kk result)
-    (if (= kk 0) result
-      (iter (- kk 1) (/ (funcall n kk) (+ (funcall d kk) result)))))
-  (iter k 0))
+  (cl-labels
+      ((iter (kk result)
+             (if (= kk 0) result
+               (iter (- kk 1) (/ (funcall n kk) (+ (funcall d kk) result))))))
+    (iter k 0)))
 
-(cont-frac (lambda (_) 1.0)
-           (lambda (_) 1.0)
-           500)
 
 ;; 1.38
 (defun di (k)
@@ -327,26 +332,29 @@
 
 ;; 1.46
 (defun iterative-improve (good-enough? improve)
-  (defun iter (guess)
-    (if (funcall good-enough? guess)
-        guess
-      (iter (funcall improve guess))))
-  (lambda (guess)
-    (iter guess)))
+  (cl-labels
+      ((iter (guess)
+             (if (funcall good-enough? guess)
+                 guess
+               (iter (funcall improve guess)))))
+    (lambda (guess)
+      (iter guess))))
 
 (defun sqrt-iter (x)
-  (defun good-enough? (guess)
-    (< (abs (- (square guess) x)) sicp-tolerance))
-  (defun improve (guess)
-    (funcall (average-damp (lambda (y) (/ x y))) guess))
-  (funcall (iterative-improve 'good-enough? 'improve) 1.0))
+  (cl-labels
+      ((good-enough? (guess)
+                     (< (abs (- (square guess) x)) sicp-tolerance))
+       (improve (guess)
+                (funcall (average-damp (lambda (y) (/ x y))) guess)))
+    (funcall (iterative-improve 'good-enough? 'improve) 1.0)))
 
 (defun fixed-point-iter (f first-guess)
-  (defun close-enough? (guess)
-    (< (abs (- (funcall f guess) guess)) sicp-tolerance))
-  (defun improve (guess)
-    (funcall f guess))
-  (funcall (iterative-improve 'close-enough? 'improve) first-guess))
+  (cl-labels
+      ((close-enough? (guess)
+                      (< (abs (- (funcall f guess) guess)) sicp-tolerance))
+       (improve (guess)
+                (funcall f guess)))
+    (funcall (iterative-improve 'close-enough? 'improve) first-guess)))
 
 ;; Local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)

@@ -33,18 +33,18 @@
 
 ;; 2.1
 (defun make-rat (n d)
-  (defun gcd (a b)
-    (cond
-     ((> b a) (gcd b a))
-     ((= b 0) a)
-     (t (gcd b (% a b)))))
-  (let* ((pos-n (abs n))
-         (pos-d (abs d))
-         (g (gcd pos-n pos-d))
-         (sign (* n d)))
-    (if (< sign 0)
-        (cons (- 0 (/ pos-n g)) (/ pos-d g))
-      (cons (/ pos-n g) (/ pos-d g)))))
+  (cl-labels ((gcd (a b)
+                   (cond
+                    ((> b a) (gcd b a))
+                    ((= b 0) a)
+                    (t (gcd b (% a b))))))
+    (let* ((pos-n (abs n))
+           (pos-d (abs d))
+           (g (gcd pos-n pos-d))
+           (sign (* n d)))
+      (if (< sign 0)
+          (cons (- 0 (/ pos-n g)) (/ pos-d g))
+        (cons (/ pos-n g) (/ pos-d g))))))
 
 ;; 2.2
 (defun make-segment (p1 p2)
@@ -184,11 +184,11 @@
 
 ;; 2.18
 (defun sicp-reverse (lst)
-  (defun iter (l lst)
-    (if (null l)
-        lst
-      (iter (cdr l) (cons (car l) lst))))
-  (iter lst nil))
+  (cl-labels ((iter (l lst)
+                    (if (null l)
+                        lst
+                      (iter (cdr l) (cons (car l) lst)))))
+    (iter lst nil)))
 
 ;; 2.19
 (defun even? (a)
@@ -197,14 +197,14 @@
   (/= (mod a 2) 0))
 
 (defun same-parity (a &rest lst)
-  (defun trans (l p)
-    (cond
-     ((null l) nil)
-     ((funcall p (car l)) (cons (car l) (trans (cdr l) p)))
-     (t (trans (cdr l) p))))
-  (if (even? a)
-      (cons a (trans lst 'even?))
-    (cons a (trans lst 'odd?))))
+  (cl-labels ((trans (l p)
+                     (cond
+                      ((null l) nil)
+                      ((funcall p (car l)) (cons (car l) (trans (cdr l) p)))
+                      (t (trans (cdr l) p)))))
+    (if (even? a)
+        (cons a (trans lst 'even?))
+      (cons a (trans lst 'odd?)))))
 
 ;; 2.21
 (defun map (proc items)
@@ -412,31 +412,34 @@
 
 ;; 2.42
 (defun queens (board-size)
-  (defun queen-cols (k)
-    (if (= k 0)
-        (list nil)
-      (filter
-       (lambda (positions) (safe? k positions))
-       (flatmap
-        (lambda (rest-of-queens)
-          (map (lambda (new-row)
-                 (adjoin-position
-                  new-row k rest-of-queens))
-               (number-sequence 1 board-size)))
-        (queen-cols (- k 1))))))
-  (defun adjoin-position (row k q)
-    (cons row q))
-  (defun andall (lst)
-    (if (null lst) t
-      (and (car lst) (andall (cdr lst)))))
-  (defun safe? (k pos)
-    (let ((row (car pos))
-          (col 1))
-      (andall (map (lambda (pair) (and (/= row (car pair))
-                                  (/= (abs (- (car pair) row))
-                                      (abs (- (cdr pair) col)))))
-                   (map-extend 'cons (cdr pos) (number-sequence 2 k))))))
-  (queen-cols board-size))
+  (cl-labels
+      ((queen-cols (k)
+                   (if (= k 0)
+                       (list nil)
+                     (filter
+                      (lambda (positions) (safe? k positions))
+                      (flatmap
+                       (lambda (rest-of-queens)
+                         (map (lambda (new-row)
+                                (adjoin-position
+                                 new-row k rest-of-queens))
+                              (number-sequence 1 board-size)))
+                       (queen-cols (- k 1))))))
+       (adjoin-position (row k q)
+                        (cons row q))
+       (andall (lst)
+               (if (null lst) t
+                 (and (car lst) (andall (cdr lst)))))
+       (safe? (k pos)
+              (let ((row (car pos))
+                    (col 1))
+                (andall (map (lambda (pair) (and (/= row (car pair))
+                                            (/= (abs (- (car pair) row))
+                                                (abs (- (cdr pair) col)))))
+                             (map-extend 'cons
+                                         (cdr pos)
+                                         (number-sequence 2 k)))))))
+    (queen-cols board-size)))
 
 ;; 2.54
 (defun equal? (a b)
@@ -626,14 +629,15 @@
                   (tree->list1 (branch-right tree))))))
 
 (defun tree->list2 (tree)
-  (defun copy-to-list (tree result-list)
-    (if (null tree) result-list
-      (copy-to-list (branch-left tree)
-                    (cons (entry tree)
-                          (copy-to-list
-                           (branch-right tree)
-                           result-list)))))
-  (copy-to-list tree nil))
+  (cl-labels
+      ((copy-to-list (tree result-list)
+                     (if (null tree) result-list
+                       (copy-to-list (branch-left tree)
+                                     (cons (entry tree)
+                                           (copy-to-list
+                                            (branch-right tree)
+                                            result-list))))))
+    (copy-to-list tree nil)))
 
 ;; 2.64
 (defun list->tree (elements)
@@ -690,9 +694,9 @@
 (defun hft-right (tree) (cadr tree))
 
 (defun symbols (tree)
-    (if (leaf? tree)
-        (list (symbol-leaf tree))
-      (caddr tree)))
+  (if (leaf? tree)
+      (list (symbol-leaf tree))
+    (caddr tree)))
 
 (defun weight (tree)
   (if (leaf? tree)
@@ -700,16 +704,17 @@
     (cadddr tree)))
 
 (defun decode (bits tree)
-  (defun decode-1 (bits current-branch)
-    (if (null bits)
-        nil
-      (let ((next-branch
-             (choose-branch (car bits) current-branch)))
-        (if (leaf? next-branch)
-            (cons (symbol-leaf next-branch)
-                  (decode-1 (cdr bits) tree))
-          (decode-1 (cdr bits) next-branch)))))
-  (decode-1 bits tree))
+  (cl-labels
+      ((decode-1 (bits current-branch)
+                 (if (null bits)
+                     nil
+                   (let ((next-branch
+                          (choose-branch (car bits) current-branch)))
+                     (if (leaf? next-branch)
+                         (cons (symbol-leaf next-branch)
+                               (decode-1 (cdr bits) tree))
+                       (decode-1 (cdr bits) next-branch))))))
+    (decode-1 bits tree)))
 
 (defun choose-branch (bit branch)
   (cond
