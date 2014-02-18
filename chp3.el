@@ -43,18 +43,17 @@
 
 ;; 3.2
 (defun make-monitor (f)
-  (let ((count 0))
-    (cl-flet
-        ((mf (m)
-             (cond
-              ((eq m 'how-many-calls?)
-               count)
-              ((eq m 'reset-count)
-               (setq count 0))
-              (t (progn
-                   (setq count (1+ count))
-                   (funcall f m))))))
-      #'mf)))
+  (let* ((count 0)
+         (mf (lambda (m)
+               (cond
+                ((eq m 'how-many-calls?)
+                 count)
+                ((eq m 'reset-count)
+                 (setq count 0))
+                (t (progn
+                     (setq count (1+ count))
+                     (funcall f m)))))))
+    mf))
 ;; (fset 's (make-monitor 'sqrt))
 ;; (s 100)
 ;; (s 'how-many-calls?)
@@ -62,57 +61,31 @@
 
 ;; 3.3
 (defun make-account (balance pwd)
-  (cl-labels
-      ((withdraw (amount)
-                 (if (>= balance amount)
-                     (progn
-                       (setq balance (- balance amount))
-                       balance)
-                   "Insufficient funds"))
-       (deposit (amount)
-                (setq balance (+ balance amount)))
-       (dispatch (secret m)
-                 (if (eq secret pwd)
-                     (cond ((eq m 'withdraw) #'withdraw)
-                           ((eq m 'deposit) #'deposit)
-                           (t (error "Unknown request")))
-                   (lambda (_) "Incorrect password"))))
-    #'dispatch))
+  (let*
+      ((withdraw (lambda (amount)
+                   (if (>= balance amount)
+                       (progn
+                         (setq balance (- balance amount))
+                         balance)
+                     "Insufficient funds")))
+       (deposit (lambda (amount)
+                  (setq balance (+ balance amount))))
+       (dispatch (lambda (secret m)
+                   (if (eq secret pwd)
+                       (cond ((eq m 'withdraw) withdraw)
+                             ((eq m 'deposit) deposit)
+                             (t (error "Unknown request")))
+                     (lambda (_) "Incorrect password")))))
+    dispatch))
 
 ;; (fset 'acc (make-account 100 'secret-password))
 ;; (funcall (acc 'secret-password 'withdraw) 40)
 ;; (funcall (acc 'secret-password 'deposit) 40)
 
 ;; 3.4
-(defun make-account2 (balance pwd)
-  (let ((time 0))
-    (cl-labels
-        ((withdraw (amount)
-                   (if (>= balance amount)
-                       (progn
-                         (setq balance (- balance amount))
-                         balance)
-                     "Insufficient funds"))
-         (deposit (amount)
-                  (setq balance (+ balance amount)))
-         (dispatch (secret m)
-                   (if (eq secret pwd)
-                       (cond ((eq m 'withdraw) (setq time 0) #'withdraw)
-                             ((eq m 'deposit) (setq time 0) #'deposit)
-                             (t (setq time 0) (error "Unknown request")))
-                     (lambda (_)
-                       (if (= time 7)
-                           (progn
-                             (setq time 0)
-                             (error "I am calling the police"))
-                         (progn
-                           (setq time (1+ time))
-                           "Incorrect password"))))))
-      #'dispatch)))
-
-;; (fset 'acc (make-account2 100 'secret-password))
-;; (funcall (acc 'secret-password 'withdraw) 40)
-;; (funcall (acc 'secret-password 'deposit) 40)
+;; (setq acc (make-account2 100 'secret-password))
+;; (funcall (funcall acc 'secret-password 'withdraw) 40)
+;; (funcall (funcall acc 'secret-password 'deposit) 40)
 
 ;; 3.5
 (defun estimate-integral (pred x1 x2 y1 y2 trials)
@@ -152,25 +125,29 @@
 
 ;; 3.7
 (defun make-account3 (balance &rest pwds)
-  (cl-labels
-      ((withdraw (amount)
-                 (if (>= balance amount)
-                     (progn
-                       (setq balance (- balance amount))
+  (let* ((withdraw
+          (lambda (amount)
+            (if (>= balance amount)
+                (progn (setq balance (- balance amount))
                        balance)
-                   "Insufficient funds"))
-       (deposit (amount)
-                (setq balance (+ balance amount)))
-       (add-pwd (npwd)
-                (add-to-list 'pwds npwd))
-       (dispatch (secret m)
-                 (if (memq secret pwds)
-                     (cond ((eq m 'withdraw) #'withdraw)
-                           ((eq m 'deposit) #'deposit)
-                           ((eq m 'add-pwd) #'add-pwd)
-                           (t (error "Unknown request")))
-                   (lambda (_) "Incorrect password"))))
-    #'dispatch))
+              "Insufficient funds")))
+         (deposit (lambda (amount)
+                    (setq balance (+ balance amount))))
+         (add-pwd (lambda (npwd)
+                    (push npwd pwds)))
+         (dispatch
+          (lambda (secret m)
+            (if (memq secret pwds)
+                (cond ((eq m 'withdraw)
+                       withdraw)
+                      ((eq m 'deposit)
+                       deposit)
+                      ((eq m 'add-pwd)
+                       add-pwd)
+                      (t (error "Unknown request")))
+              (lambda (_)
+                "Incorrect password")))))
+    dispatch))
 
 ;; (setq peter-acc (make-account3 100 'open-sesame))
 ;; (funcall (funcall peter-acc 'open-sesame 'deposit) 30)
@@ -309,39 +286,37 @@
 
 ;; 3.22
 (defun make-queue2 ()
-  (let ((front-ptr '())
-        (rear-ptr '()))
-    (cl-labels
-        ((empty-queue? ()
-                       (null front-ptr))
-         (front-queue ()
-                      (if (empty-queue?)
-                          (error "FRONT called with an empty queue")
-                        (car front-ptr)))
-         (insert-queue! (item)
-                        (let ((new-pair (cons item '())))
-                          (cond
-                           ((empty-queue?)
-                            (setq front-ptr new-pair)
-                            (setq rear-ptr new-pair))
-                           (t (setcdr rear-ptr new-pair)
-                              (setq rear-ptr new-pair)))
-                          'ok))
-         (delete-queue! ()
-                        (cond
-                         ((empty-queue?)
-                          (error "DELETE called with an empty queue"))
-                         (t (setq front-ptr (cdr front-ptr))))
-                        'ok)
-         (dispatch (m)
-                   (cond
-                    ((eq m 'make-queue) #'make-queue)
-                    ((eq m 'empty-queue?) #'empty-queue?)
-                    ((eq m 'front-queue) #'front-queue)
-                    ((eq m 'insert-queue!) #'insert-queue!)
-                    ((eq m 'delete-queue!) #'delete-queue!)
-                    (t (error "Unknown command")))))
-      #'dispatch)))
+  (let* ((front-ptr '())
+        (rear-ptr '())
+        (empty-queue? (lambda ()
+                        (null front-ptr)))
+        (front-queue (lambda ()
+                       (if (funcall empty-queue?)
+                           (error "FRONT called with an empty queue")
+                         (car front-ptr))))
+        (insert-queue! (lambda (item)
+                         (let ((new-pair (cons item '())))
+                           (cond
+                            ((funcall empty-queue?)
+                             (setq front-ptr new-pair)
+                             (setq rear-ptr new-pair))
+                            (t (setcdr rear-ptr new-pair)
+                               (setq rear-ptr new-pair)))
+                           'ok)))
+        (delete-queue! (lambda ()
+                         (cond
+                          ((funcall empty-queue?)
+                           (error "DELETE called with an empty queue"))
+                          (t (setq front-ptr (cdr front-ptr))))
+                         'ok))
+        (dispatch (lambda (m)
+                    (cond
+                     ((eq m 'empty-queue?) empty-queue?)
+                     ((eq m 'front-queue) front-queue)
+                     ((eq m 'insert-queue!) insert-queue!)
+                     ((eq m 'delete-queue!) delete-queue!)
+                     (t (error "Unknown command"))))))
+    dispatch))
 
 (defun empty-queue2? (queue)
   (funcall (funcall queue 'empty-queue?)))
@@ -958,14 +933,14 @@
      (apply proc (mapcar #'stream-car argstreams))
      (apply #'stream-map-g (cons proc (mapcar #'stream-cdr argstreams))))))
 
-(defun stream->list (stream)
-  (if (stream-null? stream) '()
-    (cons (stream-car stream) (stream->list (stream-cdr stream)))))
+(defun stream->list (stream n)
+  (if (= n 0) '()
+    (cons (stream-car stream) (stream->list (stream-cdr stream) (- n 1)))))
 
 ;; TEST
 ;; (setq s1 (stream-enumerate-interval 1 3))
 ;; (setq s2 (stream-enumerate-interval 4 6))
-;; (stream->list (stream-map-g #'+ s1 s2))
+;; (stream->list (stream-map-g #'+ s1 s2) 2)
 
 ;; 3.51
 (defun show (x)
@@ -973,7 +948,7 @@
   x)
 ;; (setq x (stream-map #'show
 ;;                     (stream-enumerate-interval 0 10)))
-;; (stream-ref x 10)
+;; (stream-ref x 5)
 
 ;; 3.52
 ;; (setq sum 0)
@@ -1029,13 +1004,8 @@
   (cons-stream (stream-car s)
                (add-streams (stream-cdr s) (partial-sums s))))
 
-(defun stream-take (s n)
-  (if (= n 0) the-empty-stream
-    (cons-stream (stream-car s)
-                 (stream-take (stream-cdr s) (- n 1)))))
-
 ;; TEST
-;; (stream->list (stream-take (partial-sums integers) 8))
+;; (stream->list (partial-sums integers) 8)
 
 ;; 3.56
 (defun merge-streams (s1 s2)
@@ -1055,16 +1025,74 @@
                  (t (cons-stream
                      s1car
                      (merge-streams (stream-cdr s1) (stream-cdr s2)))))))))
+
 (setq S
       (cons-stream
        1
-       (let ((stream (merge-streams
-                      (scale-stream S 2)
-                      (scale-stream S 3))))
+       (let ((stream (merge-streams (scale-stream S 2)
+                                    (scale-stream S 3))))
          (merge-streams stream (scale-stream S 5)))))
 
+;; 3.58
+(defun expand (num den radix)
+  (cons-stream
+   (/ (* num radix) den)
+   (expand (% (* num radix) den) den radix)))
+
+;; 3.59
+(defun integrate-series (s)
+  (cl-labels
+      ((series (n stream)
+               (cons-stream
+                (* (stream-car stream)
+                   (/ 1.0 n))
+                (series (1+ n) (stream-cdr stream)))))
+    (series 1 s)))
+
+(setq exp-series
+      (cons-stream 1 (integrate-series exp-series)))
+(setq cosine-series
+      (cons-stream 1 (stream-map-g (lambda (n) (* -1 n))
+                                   (integrate-series sine-series))))
+(setq sine-series
+      (cons-stream 0 (integrate-series cosine-series)))
+
+;; 3.60
+(defun mul-series (s1 s2)
+  (cons-stream
+   (* (stream-car s1)
+      (stream-car s2))
+   (add-streams
+    (scale-stream (stream-cdr s1) (stream-car s2))
+    (mul-series s1 (stream-cdr s2)))))
+
+;; 3.61
+(defun invert-unit-series (s)
+  (cons-stream 1 (stream-map-g
+                  (lambda (n) (* -1 n))
+                  (mul-series (stream-cdr s) (invert-unit-series s)))))
 ;; TEST
-;; (stream->list (stream-take S 20))
+(stream->list (invert-unit-series exp-series) 4)
+
+;; 3.62
+(defun div-series (s1 s2)
+  (let ((scar (stream-car s2)))
+    (if (= scar 0) (error "Divide by zero!")
+      (stream-map-g
+       (lambda (n) (/ n (float scar)))
+       (mul-series s1 (invert-unit-series
+                       (stream-map-g
+                        (lambda (n) (/ n (float scar)))
+                        s2)))))))
+
+(setq tangent-series (div-series sine-series cosine-series))
+;; TEST
+;; (stream->list tangent-series 6)
+
+
+
+
+
 
 
 
