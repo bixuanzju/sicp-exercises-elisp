@@ -1276,9 +1276,78 @@
                                     #'cube-sum))))
 ;; (stream->list ramanujan-number 6)
 
+;; 3.73
+(defun integral (integrand initial-value dt)
+  (let ((int))
+    (setq int (cons-stream initial-value
+                         (add-streams (scale-stream integrand dt)
+                                      int)))
+    int))
 
+(defun RC (R C dt)
+  (lambda (i vo)
+    (add-streams
+     (scale-stream i R)
+     (integral (scale-stream i (/ 1.0 C))
+               vo
+               dt))))
+;; (setq RC1 (RC 5 1 0.5))
 
+;; 3.74
+(defun sign-change-detector (x y)
+  (cond
+   ((or (and (> x 0) (< y 0))
+        (and (= x 0) (< y 0)))
+    1)
+   ((or (and (< x 0) (> y 0))
+        (and (< x 0) (= y 0)))
+    -1)
+   (t 0)))
 
+(defun make-zero-crossing (input-stream last-value)
+  (cons-stream
+   (sign-change-detector
+    (stream-car input-stream)
+    last-value)
+   (make-zero-crossing
+    (stream-cdr input-stream)
+    (stream-car input-stream))))
+(defun list->stream (lst)
+  (if (null lst) the-empty-stream
+    (cons-stream
+     (car lst)
+     (list->stream (cdr lst)))))
+
+(setq sense-data (list->stream (list 1 2 1.5 1 0.5 -0.1 -2 -3 -2 -0.5 0.2 3 4)))
+(setq zero-crossing (stream-map-g #'sign-change-detector
+                                  sense-data
+                                  (cons-stream 0 sense-data)))
+
+;; 3.75
+(defun make-zero-crossing2 (input-stream last-value previous-value)
+  (let ((avpt (/ (+ (stream-car input-stream)
+                    previous-value)
+                 2.0)))
+    (cons-stream
+     (sign-change-detector avpt last-value)
+     (make-zero-crossing2
+      (stream-cdr input-stream)
+      avpt
+      (stream-car input-stream)))))
+(setq zero-crossing2 (make-zero-crossing2
+                             sense-data
+                             0
+                             0))
+
+;; 3.76
+(defun smooth (stream)
+  (stream-map-g (lambda (x y) (/ (+ x y) 2.0))
+                stream
+                (cons-stream 0 stream)))
+(setq zero-crossing3 (let ((smothed (smooth sense-data)))
+                       (stream-map-g #'sign-change-detector
+                                     smothed
+                                     (cons-stream 0 smothed))))
 
 
 
