@@ -934,7 +934,7 @@
      (apply #'stream-map-g (cons proc (mapcar #'stream-cdr argstreams))))))
 
 (defun stream->list (stream n)
-  (if (= n 0) '()
+  (if (or (stream-null? stream) (= n 0)) '()
     (cons (stream-car stream) (stream->list (stream-cdr stream) (- n 1)))))
 
 ;; TEST
@@ -1088,6 +1088,193 @@
 (setq tangent-series (div-series sine-series cosine-series))
 ;; TEST
 ;; (stream->list tangent-series 6)
+
+
+(defun average (x y)
+  (/ (+ x y) 2))
+
+(defun sqrt-improve (guess x)
+  (average guess (/ x guess)))
+
+(defun negate (n)
+  (* -1 n))
+
+(defun sqrt-stream (x)
+  (let ((guesses))
+    (setq guesses (cons-stream
+                   1.0
+                   (stream-map-g (lambda (guess) (sqrt-improve guess x))
+                                 guesses)))
+    guesses))
+
+(defun pi-summands (n)
+  (cons-stream (/ 1.0 n)
+               (stream-map-g #'negate (pi-summands (+ 2 n)))))
+(setq pi-stream
+      (scale-stream (partial-sums (pi-summands 1)) 4))
+
+(defun euler-transformer (s)
+  (let ((s0 (stream-ref s 0))
+        (s1 (stream-ref s 1))
+        (s2 (stream-ref s 2)))
+    (cons-stream (- s2 (/ (expt (- s2 s1) 2)
+                          (+ s0 (* -2 s1) s2)))
+                 (euler-transformer (stream-cdr s)))))
+
+(defun make-tableau (transform s)
+  (cons-stream s (make-tableau transform (funcall transform s))))
+
+(defun accelerate-sequence (transform s)
+  (stream-map-g #'stream-car (make-tableau transform s)))
+
+;; 3.64
+(defun stream-limit (s tol)
+  (let ((s0 (stream-ref s 0))
+        (s1 (stream-ref s 1)))
+    (if (< (abs (- s0 s1)) tol)
+        the-empty-stream
+      (cons-stream
+       s0
+       (stream-limit (stream-cdr s) tol)))))
+
+(defun sqrt (x tol)
+  (stream-limit (sqrt-stream x) tol))
+
+;; 3.65
+(defun log-summands (n)
+  (cons-stream
+   (/ 1.0 n)
+   (stream-map-g #'negate (log-summands (1+ n)))))
+
+(setq log2 (accelerate-sequence #'euler-transformer
+                                (partial-sums (log-summands 1))))
+
+(defun interleave (s1 s2)
+  (if (stream-null? s1)
+      s2
+    (cons-stream (stream-car s1)
+                 (interleave s2 (stream-cdr s1)))))
+
+(defun stream-pairs (s1 s2)
+  (cons-stream
+   (list (stream-car s1) (stream-car s2))
+   (interleave
+    (stream-map-g (lambda (x) (list (stream-car s1) x))
+                  (stream-cdr s2))
+    (stream-pairs (stream-cdr s1) (stream-cdr s2)))))
+
+(setq integers (integer-starting-from 1))
+
+;; 3.67
+(defun stream-all-pairs (s1 s2)
+  (cons-stream
+   (list (stream-car s1) (stream-car s2))
+   (interleave
+    (stream-map-g (lambda (x) (list (stream-car s1) x))
+                  (stream-cdr s2))
+    (interleave
+     (stream-map-g (lambda (x) (list x (stream-car s2)))
+                   (stream-cdr s1))
+     (stream-all-pairs (stream-cdr s1) (stream-cdr s2))))))
+
+;; TEST
+;; (stream->list (stream-all-pairs integers integers) 5)
+
+;; 3.68
+(defun wrong-pairs (s1 s2)
+  (interleave
+   (stream-map-g (lambda (x) (list (stream-car s1) x))
+                 s2)
+   (wrong-pairs (stream-cdr s1) (stream-cdr s2))))
+
+;; (stream->list (wrong-pairs integers integers) 2)
+
+;; 3.69
+(defun stream-triples (s1 s2 s3)
+  (cons-stream
+   (list (stream-car s1) (stream-car s2) (stream-car s3))
+   (interleave
+    (stream-map-g (lambda (x) (cons (stream-car s1) x))
+                  (stream-pairs s2 (stream-cdr s3)))
+    (stream-triples (stream-cdr s1) (stream-cdr s2) (stream-cdr s3)))))
+
+(defun square (x)
+  (* x x))
+
+;; Don't try to run it, Emacs can't afford
+;; (setq pythagorean-triples (stream-filter
+;;                            (lambda (x)
+;;                              (let ((x1 (car x))
+;;                                    (x2 (cadr x))
+;;                                    (x3 (caddr x)))
+;;                                (= (+ (square x1) (square x2)) (square x3))))
+;;                            (stream-triples integers integers integers)))
+
+;; 3.70
+(defun merge-weighted (s1 s2 weight)
+  (let ((s1car (stream-car s1))
+        (s2car (stream-car s2)))
+    (cond ((< (funcall weight (car s1car) (cadr s1car))
+              (funcall weight (car s2car) (cadr s2car)))
+           (cons-stream
+            s1car
+            (merge-weighted (stream-cdr s1) s2 weight)))
+          ((> (funcall weight (car s1car) (cadr s1car))
+              (funcall weight (car s2car) (cadr s2car)))
+           (cons-stream
+            s2car
+            (merge-weighted s1 (stream-cdr s2) weight)))
+          (t (cons-stream
+              s1car
+              (cons-stream
+               s2car
+               (merge-weighted (stream-cdr s1) (stream-cdr s2) weight)))))))
+
+(defun stream-pairs-g (s1 s2 weight)
+  (cons-stream
+   (list (stream-car s1) (stream-car s2))
+   (merge-weighted
+    (stream-map-g (lambda (x) (list (stream-car s1) x))
+                  (stream-cdr s2))
+    (stream-pairs-g (stream-cdr s1) (stream-cdr s2) weight)
+    weight)))
+
+(setq S1 (stream-pairs-g integers integers (lambda (x y) (+ x y))))
+
+(defun not-divisible (n)
+  (not (or (divisible? n 2)
+           (divisible? n 3)
+           (divisible? n 5))))
+(setq S2 (stream-filter
+          (lambda (pair)
+            (let ((x (car pair))
+                  (y (cadr pair)))
+              (and (not-divisible x) (not-divisible y))))
+          (stream-pairs-g integers integers
+                          (lambda (x y) (+ (* 2 x) (* 3 y) (* x y))))))
+
+;; 3.71
+(defun cube (x)
+  (* x x x))
+(defun cube-sum (x y)
+  (+ (cube x) (cube y)))
+(defun search-pair (s)
+  (let ((s1 (stream-car s))
+        (s2 (stream-car (stream-cdr s))))
+    (if (= (cube-sum (car s1) (cadr s1))
+           (cube-sum (car s2) (cadr s2)))
+        (cons-stream s1
+                     (search-pair (stream-cdr s)))
+      (search-pair (stream-cdr s)))))
+(setq ramanujan-number
+      (stream-map-g
+       (lambda (pair)
+         (+ (cube (car pair))
+            (cube (cadr pair))))
+       (search-pair (stream-pairs-g integers
+                                    integers
+                                    #'cube-sum))))
+;; (stream->list ramanujan-number 6)
 
 
 
