@@ -1349,8 +1349,68 @@
                                      smothed
                                      (cons-stream 0 smothed))))
 
+
+(defun integral2 (delayed-integrand initial-value dt)
+  (let ((int))
+    (setq int
+          (cons-stream
+           initial-value
+           (let ((integrand (force delayed-integrand)))
+             (add-streams (scale-stream integrand dt)
+                          int))))
+    int))
+(defun solve (f y0 dt)
+  (let ((y)
+        (dy))
+    (setq y (integral2 (delay dy) y0 dt))
+    (setq dy (stream-map-g f y))
+    y))
 
+;; 3.77
+(defun integral3 (delayed-integrand initial-value dt)
+  (cons-stream
+   initial-value
+   (let ((integrand (force delayed-integrand)))
+     (if (stream-null? integrand)
+         the-empty-stream
+       (integral3 (delay (stream-cdr integrand))
+                  (+ (* dt (stream-car integrand))
+                     initial-value)
+                  dt)))))
 
+;; 3.78
+(defun solve-2nd (a b y0 dy0 dt)
+  (let ((y) (dy) (ddy))
+    (setq y (integral2 (delay dy) y0 dt))
+    (setq dy (integral2 (delay ddy) dy0 dt))
+    (setq ddy (add-streams (scale-stream dy a)
+                           (scale-stream y b)))
+    y))
+
+;; 3.79
+(defun solve-2nd-g (f y0 dy0 dt)
+  (let ((y) (dy) (ddy))
+    (setq y (integral2 (delay dy) y0 dt))
+    (setq dy (integral2 (delay ddy) dy0 dt))
+    (setq ddy (stream-map-g f dy y))
+    y))
+
+;; 3.80
+(defun RCL (R L C dt)
+  (lambda (vc0 il0)
+    (let ((vc) (il) (dvc) (dil))
+      (setq vc (integral2 (delay dvc) vc0 dt))
+      (setq il (integral2 (delay dil) il0 dt))
+      (setq dvc (scale-stream il (/ -1.0 C)))
+      (setq dil (add-streams (scale-stream il (* -1 (/ R (float L))))
+                             (scale-stream vc (/ 1.0 L))))
+      (stream-map-g (lambda (x y) (cons x y)) vc il))))
+
+;; TEST
+;; (setq RCL0 (RCL 1 1 0.2 0.1))
+;; (stream->list (funcall RCL0 10 0) 12)
+
+;;; AWESOME chapter!
 
 
 ;; local Variables:
