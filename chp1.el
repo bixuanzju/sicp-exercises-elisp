@@ -1,4 +1,4 @@
-;;; sicp-chp1.el --- exercises from chp1 -*- lexical-binding: t -*-
+;;; chp1.el --- exercises from chp1 -*- lexical-binding: t -*-
 
 ;; Copyright (C) Jeremy Bi
 
@@ -360,4 +360,4 @@ a powerful technique when designing iterative algorithms."
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
 ;; End:
 
-;;; sicp-chp1.el ends here
+;;; chp1.el ends here

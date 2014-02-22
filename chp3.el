@@ -1,4 +1,4 @@
-;;; sicp-chp3.el --- exercises from chp3 -*- lexical-binding: t -*-
+;;; chp3.el --- exercises from chp3 -*- lexical-binding: t -*-
 
 ;; Copyright (C) Jeremy Bi
 
@@ -1417,4 +1417,4 @@
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
 ;; End:
 
-;;; sicp-chp3.el ends here
+;;; chp3.el ends here

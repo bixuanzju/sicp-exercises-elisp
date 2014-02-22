@@ -1,0 +1,416 @@
+;;; chp4.el --- exercises from chap4 -*- lexical-binding: t -*-
+
+;; Copyright (C) Jeremy Bi
+
+;; Author: Jeremy Bi <xbi@zju.edu.cn>
+;; Maintainer: Jeremy Bi <xbi@zju.edu.cn>
+;; Created:  21 Feb 2014
+;; Keywords: convenience editing
+;; URL: https://github.com/bixuanzju/emacs_repo
+
+;; This file is not part of GNU Emacs.
+
+;;; License:
+
+;; This program is free software; you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License
+;; as published by the Free Software Foundation; either version 3
+;; of the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
+;; You should have received a copy of the GNU General Public License
+;; along with GNU Emacs; see the file COPYING.  If not, write to the
+;; Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
+
+;;; Commentary:
+
+;;; Code:
+
+(defun sicp-eval (exp env)
+  (cond ((self-evaluating? exp) exp)
+        ((variable? exp) (lookup-variable-value exp env))
+        ((quoted? exp) (text-of-quotation exp))
+        ((assignment? exp) (eval-assignment exp env))
+        ((definition? exp) (eval-definition exp env))
+        ((if? exp) (eval-if exp env))
+        ((and? exp) (eval-and exp env))
+        ((or? exp) (eval-or exp env))
+        ((lambda? exp) (make-procedure (lambda-parameters exp)
+                                  (lambda-body exp)
+                                  env))
+        ((begin? exp)
+         (eval-sequence (begin-actions exp) env))
+        ((cond? exp) (sicp-eval (cond->if exp) env))
+        ((let? exp) (sicp-eval (let->combination exp) env))
+        ((let*? exp) (sicp-eval (let*->nexeted-lets exp) env))
+        ((for? exp) (sicp-eval (for->let exp) env))
+        ((while? exp) (sicp-eval (while->let exp) env))
+        ((application? exp)
+         (apply (sicp-eval (operator exp) env)
+                (list-of-values (operands exp) env)))
+        (t (error "Unknown expression type"))))
+
+(defun sicp-apply (procedure arguments)
+  (cond ((primitive-procedure? procedure)
+         (apply-primitive-procedure procedure arguments))
+        ((compound-procedure? procedure)
+         (eval-sequence
+          (procedure-body procedure)
+          (extend-environment
+           (procedure-parameters procedure)
+           arguments
+           (procedure-environment procedure))))
+        (t
+         (error "Unknown procedure type"))))
+
+(defun list-of-values (exps env)
+  (if (no-operands? exps)
+      '()
+    (cons (sicp-eval (first-operand exps) env)
+          (list-of-values (rest-operands exps) env))))
+
+(defun eval-if (exp env)
+  (if (true? (sicp-eval (if-predicate exp) env))
+      (sicp-eval (if-consequence exp) env)
+    (sicp-eval (if-alternative exp) env)))
+
+(defun eval-sequence (exps env)
+  (cond ((last-exp? exps)
+         (sicp-eval (first-exp exps) env))
+        (t
+         (sicp-eval (first-exp exps) env)
+         (eval-sequence (rest-exps exps) env))))
+
+(defun eval-assignment (exp env)
+  (set-variable-value! (assignment-variable exp)
+                       (sicp-eval (assignment-value exp) env)
+                       env)
+  'OK)
+
+(defun eval-definition (exp env)
+  (define-variable! (definition-variable exp)
+                    (sicp-eval (definition-value exp) env)
+                    env)
+  'OK)
+
+;; 4.1
+(defun list-of-valuesl (exps env)
+  (if (no-operands? exps)
+      '()
+    (let ((value (sicp-eval (first-operand exps) env)))
+      (cons value (list-of-valuesl (rest-operands exps) env)))))
+(defun list-of-valuesr (exps env)
+  (if (no-operands? exps)
+      '()
+    (let ((rest-values (list-of-valuesr (rest-operands exps) env)))
+      (cons (sicp-eval (first-operand exps) env)
+            rest-values))))
+
+
+(defun self-evaluating? (exp)
+  (cond ((numberp exp) t)
+        ((stringp exp) t)
+        (t nil)))
+
+(defun variable? (exp)
+  (symbolp exp))
+
+(defun quoted? (exp)
+  (tagged-list? exp 'quote))
+(defun text-of-quotation (exp)
+  (cadr exp))
+
+(defun assignment? (exp)
+  (tagged-list? exp 'set!))
+(defun assignment-variable (exp)
+  (cadr exp))
+(defun assignment-value (exp)
+  (caddr exp))
+
+(defun definition? (exp)
+  (tagged-list? exp 'define))
+(defun definition-variable (exp)
+  (if (symbolp (cadr exp))
+      (cadr exp)
+    (caddr exp)))
+(defun definition-value (exp)
+  (if (symbolp (cadr exp))
+      (caddr exp)
+    (make-lambda (cdadr exp)
+            (cddr exp))))
+
+(defun lambda? (exp)
+  (tagged-list? exp 'lambda))
+(defun lambda-parameters (exp)
+  (cadr exp))
+(defun lambda-body (exp)
+  (cddr exp))
+
+(defun make-lambda (parameters body)
+  (cons 'lambda (cons parameters body)))
+
+(defun if? (exp)
+  (tagged-list? exp 'if))
+(defun if-predicate (exp)
+  (cadr exp))
+(defun if-consequence (exp)
+  (caddr exp))
+(defun if-alternative (exp)
+  (if (not (null (cdddr exp)))
+      (cadddr exp)
+    'false))
+
+(defun make-if (predicate consequence alternative)
+  (list 'if predicate consequence alternative))
+
+(defun begin? (exp)
+  (tagged-list? exp 'begin))
+(defun begin-actions (exp) (cdr exp))
+(defun last-exp? (seq) (null (cdr seq)))
+(defun first-exp (seq) (car seq))
+(defun rest-exps (seq) (cdr seq))
+
+(defun sequence->exp (seq)
+  (cond ((null seq) seq)
+        ((last-exp? seq) (first-exp seq))
+        (t (make-begin seq))))
+(defun make-begin (seq)
+  (cons 'begin seq))
+
+(defun application? (exp) (consp exp))
+(defun operator (exp) (car exp))
+(defun operands (exp) (cdr exp))
+(defun no-operands? (ops) (null ops))
+(defun first-operand (ops) (car ops))
+(defun rest-operands (ops) (cdr ops))
+
+
+
+(defun cond? (exp) (tagged-list? exp 'cond))
+(defun cond-clauses (exp) (cdr exp))
+(defun cond-else-clause? (clause)
+  (eq (cond-predicate clause) 'else))
+(defun cond-predicate (clause) (car clause))
+(defun cond-actions (clause) (cdr clause))
+(defun cond->if (exp) (expand-clauses (cond-clauses exp)))
+;; 4.5
+(defun expand-clauses (clauses)
+  (if (null clauses)
+      'false
+    (let ((first (car clauses))
+          (rest (cdr clauses)))
+      (if (cond-else-clause? first)
+          (if (null rest)
+              (sequence->exp (cond-actions first))
+            (error "ELSE clause isn't last"))
+        (make-if (cond-predicate first)
+                 (if (eq (car (cond-actions first)) '=>)
+                     (make-application (cadr (cond-actions first))
+                                       (list (cond-predicate first)))
+                   (sequence->exp (cond-actions first)))
+                 (expand-clauses rest))))))
+(defun make-application (operator operands)
+  (cons operator operands))
+
+;; TODO:
+(defun tagged-list? (exp value)
+  (eq (car exp) value))
+
+;; 4.4
+(defun eval-and (exp env)
+  (let ((clauses (and-clauses exp)))
+    (eval-and-clauses clauses env)))
+
+(defun eval-and-clauses (clauses env)
+  (cond ((null clauses)
+         'true)
+        ((last-clause? clauses)
+         (if (true? (sicp-eval (car clauses) env))
+             'true
+           'false))
+        (t
+         (let ((first (car clauses))
+               (rest (cdr clauses)))
+           (if (true? (sicp-eval first env))
+               (eval-and-clauses rest env)
+             'false)))))
+
+(defun and? (exp) (tagged-list? exp 'and))
+(defun and-clauses (exp) (cdr exp))
+(defun last-clause? (clauses) (null (cdr clauses)))
+
+(defun eval-or (exp env)
+  (let ((clauses (or-clauses exp)))
+    (eval-or-clauses clauses env)))
+
+(defun eval-or-clauses (clauses env)
+  (cond ((null clauses)
+         'false)
+        ((last-clause? clauses)
+         (if (true? (sicp-eval (car clauses) env))
+             'true
+           'false))
+        (t
+         (let ((first (car clauses))
+               (rest (cdr clauses)))
+           (if (true? (sicp-eval first env))
+               'true
+             (eval-or-clauses rest env))))))
+
+(defun or? (exp) (tagged-list? exp 'or))
+(defun or-clauses (exp) (cdr exp))
+
+
+(defun eval-and2 (exp env)
+  (sicp-eval (expand-and-clauses (and-clauses exp)) env))
+(defun expand-and-clauses (clauses)
+  (cond ((null clauses)
+         'true)
+        ((last-clause? clauses)
+         (make-if (car clauses)
+                  'true
+                  'false))
+        (t
+         (make-if (car clauses)
+                  (expand-and-clauses (cdr clauses))
+                  'false))))
+(defun eval-or2 (exp env)
+  (sicp-eval (expand-or-clauses (or-clauses exp)) env))
+(defun expand-or-clauses (clauses)
+  (cond ((null clauses)
+         'false)
+        ((last-clause? clauses)
+         (make-if (car clauses)
+                  'true
+                  'false))
+        (t
+         (make-if (car clauses)
+                  'true
+                  (expand-or-clauses (cdr clauses))))))
+
+;; 4.6 4.8
+(defun let? (exp)
+  (tagged-list? exp 'let))
+(defun let-vars (exp)
+  (if (null (cadr exp))
+      '()
+    (let ((bindings (cadr exp)))
+      (mapcar (lambda (pair) (car pair)) bindings))))
+(defun let-exps (exp)
+  (if (null (cadr exp))
+      '()
+    (let ((bindings (cadr exp)))
+      (mapcar (lambda (pair) (cadr pair)) bindings))))
+(defun let-body (exp) (cddr exp))
+(defun define-procedure (name paras body)
+  (list 'define name (make-lambda paras body)))
+(defun make-let-exp (bindings body)
+  (cons 'let (cons bindings body)))
+
+(defun let->combination (exp)
+  (if (or (consp (cadr exp))
+          (null (cadr exp)))
+      (cons (make-lambda (let-vars exp) (let-body exp))
+            (let-exps exp))
+    ;; named let
+    (let ((bindings (caddr exp))
+          (procedure-name (cadr exp))
+          (paramters (let-vars (cdr exp)))
+          (procedure-body (let-body (cdr exp))))
+      (make-let-exp bindings
+                    (list (define-procedure procedure-name
+                            paramters
+                            procedure-body)
+                          (cons procedure-name paramters))))))
+
+;; TEST
+;; (let->combination '(let ((x 3)
+;;                          (y 4))
+;;                      (+ x y)
+;;                      (* x y)))
+;; (let->combination '(let fib-iter ((a 1)
+;;                                   (b 0)
+;;                                   (count n))
+;;                         (if (= count 0)
+;;                             b
+;;                           (fib-iter (+ a b) a (- count 1)))))
+
+;; 4.7
+(defun let*? (exp)
+  (tagged-list? exp 'let*))
+(defun let*-bindings (exp) (cadr exp))
+(defun let*-body (exp) (cddr exp))
+(defun make-let*-exp (bindings body)
+  (cons 'let* (cons bindings body)))
+(defun let*->nexeted-lets (exp)
+  (let ((bindings (let*-bindings exp)))
+    (if (null (cdr bindings))
+        (make-let-exp bindings (let*-body exp))
+      (make-let-exp
+       (list (car bindings))
+       (list (let*->nexeted-lets (make-let*-exp (cdr bindings) (let*-body exp))))))))
+
+;; TEST
+;; (let*->nexeted-lets '(let* ((x 3)
+;;                             (y (+ x 2))
+;;                             (z (+ x y 5)))
+;;                        (+ x z)
+;;                        (* x z)))
+
+;; 4.9
+(defun for? (exp)
+  (tagged-list? exp 'for))
+(defun for->let (exp)
+  (let ((var (cadr exp))
+        (from (caddr exp))
+        (to (cadddr exp))
+        (body (cddddr exp)))
+    `(let for-iter ((,var ,from))
+          (if (> ,var ,to)
+              'Done
+            (begin
+             ,@body
+             (for-iter (+ 1 ,var)))))))
+
+;; Example
+;; (for->let '(for i 1 10 (message i) (message (+ 1 i)))) =>
+;; (let for-iter ((i 1))
+;;      (if (> i 10)
+;;          (quote Done)
+;;        (begin (message i)
+;;               (message (+ 1 i))
+;;               (for-iter (+ 1 i)))))
+
+(defun while? (exp)
+  (tagged-list? exp 'while))
+(defun while->let (exp)
+  (let ((test (cadr exp))
+        (body (cddr exp)))
+    `(let while-iter ()
+          (if ,test
+              'Done
+            (begin
+             ,@body
+             (while-iter))))))
+
+;; Example
+;; (while->let '(while (< i 10) (message i) (set! i (+ 1 i)))) =>
+;; (let while-iter nil (if (< i 10)
+;;                         (quote Done)
+;;                       (begin (message i)
+;;                              (set! i (+ 1 i))
+;;                              (while-iter))))
+
+
+
+
+;; local Variables:
+;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
+;; End:
+
+;;; chp4.el ends here
