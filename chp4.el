@@ -393,19 +393,18 @@
         (body (cddr exp)))
     `(let while-iter ()
           (if ,test
-              'Done
             (begin
              ,@body
-             (while-iter))))))
+             (while-iter))
+              'Done))))
 
 ;; Example
 ;; (while->let '(while (< i 10) (message i) (set! i (+ 1 i)))) =>
 ;; (let while-iter nil (if (< i 10)
-;;                         (quote Done)
-;;                       (begin (message i)
-;;                              (set! i (+ 1 i))
-;;                              (while-iter))))
-
+;;                         (begin (message i)
+;;                                (set! i (+ 1 i))
+;;                                (while-iter))
+;;                       (quote Done)))
 
 
 
