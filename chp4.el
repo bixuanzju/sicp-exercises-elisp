@@ -38,6 +38,7 @@
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
         ((if? exp) (eval-if exp env))
+        ((unbound? exp) (eval-make-unbound exp env))
         ((and? exp) (eval-and exp env))
         ((or? exp) (eval-or exp env))
         ((lambda? exp) (make-procedure (lambda-parameters exp)
@@ -51,7 +52,7 @@
         ((for? exp) (sicp-eval (for->let exp) env))
         ((while? exp) (sicp-eval (while->let exp) env))
         ((application? exp)
-         (apply (sicp-eval (operator exp) env)
+         (sicp-apply (sicp-eval (operator exp) env)
                 (list-of-values (operands exp) env)))
         (t (error "Unknown expression type"))))
 
@@ -125,6 +126,11 @@
 (defun text-of-quotation (exp)
   (cadr exp))
 
+(defun tagged-list? (exp tag)
+  (if (consp exp)
+      (eq (car exp) tag)
+    nil))
+
 (defun assignment? (exp)
   (tagged-list? exp 'set!))
 (defun assignment-variable (exp)
@@ -137,7 +143,7 @@
 (defun definition-variable (exp)
   (if (symbolp (cadr exp))
       (cadr exp)
-    (caddr exp)))
+    (caadr exp)))
 (defun definition-value (exp)
   (if (symbolp (cadr exp))
       (caddr exp)
@@ -216,10 +222,6 @@
                  (expand-clauses rest))))))
 (defun make-application (operator operands)
   (cons operator operands))
-
-;; TODO:
-(defun tagged-list? (exp value)
-  (eq (car exp) value))
 
 ;; 4.4
 (defun eval-and (exp env)
@@ -375,7 +377,7 @@
               'Done
             (begin
              ,@body
-             (for-iter (+ 1 ,var)))))))
+             (for-iter (add 1 ,var)))))))
 
 ;; Example
 ;; (for->let '(for i 1 10 (message i) (message (+ 1 i)))) =>
@@ -406,6 +408,175 @@
 ;;                                (while-iter))
 ;;                       (quote Done)))
 
+(defun true? (x) (not (eq x nil)))
+(defun false? (x) (eq x 'false))
+
+(defun make-procedure (parameters body env)
+  (list 'procedure parameters body env))
+(defun compound-procedure? (p)
+  (tagged-list? p 'procedure))
+(defun procedure-parameters (p) (cadr p))
+(defun procedure-body (p) (caddr p))
+(defun procedure-environment (p) (cadddr p))
+
+(defun enclosing-environment (env) (cdr env))
+(defun first-frame (env) (car env))
+(defconst the-empty-environment '())
+
+(defun anew-frame (variables values)
+  (cons variables values))
+(defun frame-variable (frame) (car frame))
+(defun frame-values (frame) (cdr frame))
+(defun add-binding-to-frame (var val frame)
+  (setcar frame (cons var (car frame)))
+  (setcdr frame (cons val (cdr frame))))
+
+(defun extend-environment (vars vals base-env)
+  (if (= (length vars) (length vals))
+      (cons (anew-frame vars vals) base-env)
+    (if (< (length vars) (length vals))
+        (error "Too many arguments supplied")
+      (error "Too few arguments supplied"))))
+
+;; 4.12
+(defun scan-frame (var vars vals)
+  (cond ((null vars)
+         nil)
+        ((eq var (car vars))
+         vals)
+        (t (scan-frame var (cdr vars) (cdr vals)))))
+
+(defun traverse-env (var env)
+  (if (null env)
+      nil
+    (let* ((frame (first-frame env))
+           (vals (scan-frame var
+                             (frame-variable frame)
+                             (frame-values frame))))
+      (if vals vals
+        (traverse-env var (enclosing-environment env))))))
+
+
+(defun lookup-variable-value (var env)
+  (let ((vals (traverse-env var env)))
+    (if vals
+        (car vals)
+      (error "Unbound variable: %s" var))))
+
+(defun set-variable-value! (var val env)
+  (let ((vals (traverse-env var env)))
+    (if vals
+        (setcar vals val)
+      (error "Unbound variable: %s" var))))
+
+(defun define-variable! (var val env)
+  (let* ((frame (first-frame env))
+         (vals (scan-frame var
+                           (frame-variable frame)
+                           (frame-values frame))))
+    (if vals
+        (setcar vals val)
+      (add-binding-to-frame var val frame))))
+
+;; 4.13
+(defun unbound? (exp)
+  (tagged-list? exp 'make-unbound!))
+(defun delete-var-val (var vars vals)
+  (cond ((null vars) (cons nil nil))
+        ((eq (car vars) var)
+         (cons (cdr vars) (cdr vals)))
+        (t
+         (let ((result (delete-var-val var (cdr vars) (cdr vals))))
+           (cons (cons (car vars) (car result))
+                 (cons (car vals) (cdr result)))))))
+
+(defun eval-make-unbound (exp env)
+  (let* ((sym (cadr exp))
+         (frame (first-frame env))
+         (vars (frame-variable frame))
+         (vals (frame-values frame))
+         (result (delete-var-val sym vars vals)))
+    (setcar frame (car result))
+    (setcdr frame (cdr result)))
+  'OK)
+
+
+(defun setup-environment ()
+  (let ((initial-env
+         (extend-environment (primitive-procedure-names)
+                             (primitive-procedure-objects)
+                             the-empty-environment)))
+    (define-variable! 'true t initial-env)
+    (define-variable! 'false nil initial-env)
+    initial-env))
+
+(defun primitive-procedure? (proc)
+  (tagged-list? proc 'primitive))
+(defun primitive-implementation (proc) (cadr proc))
+
+(defconst primitive-procedures
+  (list (list 'car #'car)
+        (list 'cdr #'cdr)
+        (list 'cons #'cons)
+        (list 'null? #'null)
+        (list 'add #'+)
+        (list 'minus #'-)
+        (list 'mult #'*)
+        (list 'div #'/)
+        (list 'display #'message)
+        (list '> #'>)
+        (list '< #'<)
+        (list '= #'=)
+        (list '>= #'>=)))
+
+(defun primitive-procedure-names ()
+  (mapcar #'car primitive-procedures))
+
+(defun primitive-procedure-objects ()
+  (mapcar (lambda (proc) (list 'primitive (cadr proc)))
+          primitive-procedures))
+
+(defun apply-primitive-procedure (proc args)
+  (apply (primitive-implementation proc)
+         args))
+
+(defconst input-prompt ";;; M-Eval input:")
+(defconst output-prompt ";;; M-Eval value:")
+
+(defun drive-loop ()
+  (prompt-for-input input-prompt)
+  (let* ((input (read))
+         (output (sicp-eval input the-global-environment)))
+    (announce-output output-prompt)
+    (user-print output))
+  (drive-loop))
+
+(defun prompt-for-input (string)
+  (message "\n\n%s\n" string))
+(defun announce-output (string)
+  (message "\n\n%s\n" string))
+(defun user-print (object)
+  (if (compound-procedure? object)
+      (message "compound-procedure %s %s <procedure-env>"
+               (procedure-parameters object)
+               (procedure-body object))
+    (message "%s" object)))
+
+;; TEST
+(setq the-global-environment (setup-environment))
+;; (sicp-eval '(define (append x y)
+;;               (if (null? x)
+;;                   y
+;;                 (cons (car x) (append (cdr x) y)))) the-global-environment)
+;; (sicp-eval '(append '(a b c) '(d e f))
+;;            the-global-environment)
+;; (sicp-eval '(define (factorial n)
+;;               (if (= n 1) 1
+;;                 (mult (factorial (minus n 1)) n)))
+;;            the-global-environment)
+;; (sicp-eval '(factorial 4) the-global-environment)
+
+
 
 
 ;; local Variables:
