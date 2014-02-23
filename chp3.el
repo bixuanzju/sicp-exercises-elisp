@@ -89,16 +89,16 @@
 
 ;; 3.5
 (defun estimate-integral (pred x1 x2 y1 y2 trials)
-  (cl-labels
-      ((iter (trials-remaining trials-passed)
-             (cond ((= trials-remaining 0)
-                    (/ trials-passed trials))
-                   ((funcall pred x1 x2 y1 y2)
-                    (iter (- trials-remaining 1)
-                          (1+ trials-passed)))
-                   (t (iter (- trials-remaining 1)
-                            trials-passed)))))
-    (* (- x2 x1) (- y2 y1) (iter trials 0.0))))
+  (letrec
+      ((iter (lambda (trials-remaining trials-passed)
+               (cond ((= trials-remaining 0)
+                      (/ trials-passed trials))
+                     ((funcall pred x1 x2 y1 y2)
+                      (funcall iter (- trials-remaining 1)
+                               (1+ trials-passed)))
+                     (t (funcall iter (- trials-remaining 1)
+                                 trials-passed))))))
+    (* (- x2 x1) (- y2 y1) (funcall iter trials 0.0))))
 
 (defun pi-predicate (x1 x2 y1 y2)
   (let ((xc (/ (- x2 x1) 2))
@@ -171,14 +171,14 @@
 
 ;; 3.14
 (defun mystery (x)
-  (cl-labels
-      ((myloop (x y)
-               (if (null x)
-                   y
-                 (let ((temp (cdr x)))
-                   (setcdr x y)
-                   (myloop temp x)))))
-    (myloop x '())))
+  (letrec
+      ((myloop (lambda (x y)
+                 (if (null x)
+                     y
+                   (let ((temp (cdr x)))
+                     (setcdr x y)
+                     (funcall myloop temp x))))))
+    (funcall myloop x '())))
 
 
 ;; 3.16
@@ -191,17 +191,16 @@
 
 ;; 3.17
 (defun count-pair-c (x)
-  (let ((temp '()))
-    (cl-labels
-        ((iter (xs)
-               (cond
-                ((not (consp xs)) 0)
-                ((memq xs temp) 0)
-                (t (setq temp (cons xs temp))
-                   (+ 1
-                      (iter (car xs))
-                      (iter (cdr xs)))))))
-      (iter x))))
+  (letrec ((temp '())
+           (iter (lambda (xs)
+                   (cond
+                    ((not (consp xs)) 0)
+                    ((memq xs temp) 0)
+                    (t (setq temp (cons xs temp))
+                       (+ 1
+                          (funcall iter (car xs))
+                          (funcall iter (cdr xs))))))))
+    (funcall iter x)))
 
 ;; (setq a '(1))
 ;; (setq b (cons a a))
@@ -209,26 +208,26 @@
 
 ;; 3.18
 (defun detect-cycle (x)
-  (let ((temp '()))
-    (cl-labels ((iter (xs)
-                      (cond
-                       ((null xs) nil)
-                       ((memq xs temp) t)
-                       (t (setq temp (cons xs temp))
-                          (iter (cdr xs))))))
-      (iter x))))
+  (letrec ((temp '())
+           (iter (lambda (xs)
+                   (cond
+                    ((null xs) nil)
+                    ((memq xs temp) t)
+                    (t (setq temp (cons xs temp))
+                       (funcall iter (cdr xs)))))))
+    (funcall iter x)))
 
 ;; (setq a (make-cycle '(1 2 3 4)))
 
 ;; 3.19
 (defun detect-cycle-clever (x)
-  (cl-labels
-      ((iter (a b)
-             (cond
-              ((eq a b) t)
-              ((or (null a) (null b)) nil)
-              (t (iter (cdr-safe a) (cdr-safe (cdr-safe b)))))))
-    (iter x (cdr-safe x))))
+  (letrec
+      ((iter (lambda (a b)
+               (cond
+                ((eq a b) t)
+                ((or (null a) (null b)) nil)
+                (t (funcall iter (cdr a) (cdr (cdr b))))))))
+    (funcall iter x (cdr-safe x))))
 
 
 ;; 3.21
@@ -407,11 +406,11 @@
     (setcdr (rear-ptr-de dq) nil)
     dq)))
 (defun print-deque (dq)
-  (cl-labels
-      ((iter (ptr lst)
-             (if (null ptr) (reverse lst)
-               (iter (cdr ptr) (cons (caar ptr) lst)))))
-    (iter (front-ptr-de dq) '())))
+  (letrec
+      ((iter (lambda (ptr lst)
+               (if (null ptr) (reverse lst)
+                 (funcall iter (cdr ptr) (cons (caar ptr) lst))))))
+    (funcall iter (front-ptr-de dq) '())))
 
 ;; (setq dq1 (make-deque))
 ;; (front-insert-deque! dq1 'a)
@@ -435,40 +434,40 @@
 
 ;; 3.24
 (defun make-table-local (same-key?)
-  (let ((local-table (list 'table)))
-    (cl-labels
-        ((assoc (key records)
-                (cond
-                 ((null records) nil)
-                 ((funcall same-key? (caar records) key) (car records))
-                 (t (assoc key (cdr records)))))
-         (lookup (key1 key2)
-                 (let ((subtable (assoc key1 (cdr local-table))))
-                   (if subtable
-                       (let ((record (assoc key2 (cdr subtable))))
-                         (if record (cdr record) nil))
-                     nil)))
-         (insert! (key1 key2 value)
-                  (let ((subtable (assoc key1 (cdr local-table))))
-                    (if subtable
-                        (let ((record (assoc key2 (cdr subtable))))
-                          (if record
-                              (setcdr record value)
-                            (setcdr subtable
-                                    (cons (cons key2 value) (cdr subtable)))))
-                      (setcdr local-table
-                              (cons (list key1 (cons key2 value))
-                                    (cdr local-table)))))
-                  'ok)
-         (dispatch (m)
-                   (cond
-                    ((eq m 'lookup-proc) #'lookup)
-                    ((eq m 'insert-proc!) #'insert!)
-                    (t (error "Unknown operation")))))
-      #'dispatch)))
+  (letrec ((local-table (list 'table))
+           (assoc (lambda (key records)
+                    (cond
+                     ((null records) nil)
+                     ((funcall same-key? (caar records) key) (car records))
+                     (t (funcall assoc key (cdr records))))))
+           (lookup (lambda (key1 key2)
+                     (let ((subtable (assoc key1 (cdr local-table))))
+                       (if subtable
+                           (let ((record (assoc key2 (cdr subtable))))
+                             (if record (cdr record) nil))
+                         nil))))
+           (insert! (lambda (key1 key2 value)
+                      (let ((subtable (assoc key1 (cdr local-table))))
+                        (if subtable
+                            (let ((record (assoc key2 (cdr subtable))))
+                              (if record
+                                  (setcdr record value)
+                                (setcdr subtable
+                                        (cons (cons key2 value) (cdr subtable)))))
+                          (setcdr local-table
+                                  (cons (list key1 (cons key2 value))
+                                        (cdr local-table)))))
+                      'ok))
+           (dispatch (lambda (m)
+                       (cond
+                        ((eq m 'lookup-proc) lookup)
+                        ((eq m 'insert-proc!) insert!)
+                        (t (error "Unknown operation"))))))
+    dispatch))
 
 ;; (setq t1 (make-table-local #'equal))
 ;; (funcall (funcall t1 'insert-proc!) 1 2 3)
+;; (funcall (funcall t1 'lookup-proc) 1 2)
 
 ;; 3.25
 (defun foldl (op acc lst)
@@ -477,47 +476,46 @@
    (t (foldl op (funcall op acc (car lst)) (cdr lst)))))
 
 (defun make-table-g ()
-  (let ((local-table (list '*table*)))
-    (cl-labels
-        ((lookup (key-lst)
-                 (foldl
-                  (lambda (records key)
-                    (cond
-                     ((null records) nil)
-                     ((consp records)
-                      (let ((record (assoc key records)))
-                        (if record (cdr record) nil)))
-                     (t nil)))
-                  (cdr local-table)
-                  key-lst))
-         (iter (subtable keys)
-               (cond
-                ((null keys)
-                 (cons subtable nil))
-                ((consp (cdr subtable))
-                 (cons subtable keys))
-                (t (let ((record (assoc (car keys) (cdr subtable))))
-                     (if record
-                         (iter record (cdr keys))
-                       (cons subtable keys))))))
-         (make-new (keys value)
-                   (if (null (cdr keys))
-                       (cons (car keys) value)
-                     (list (car keys) (make-new (cdr keys) value))))
-         (insert! (key-lst value)
-                  (let ((last-table (car (iter local-table key-lst)))
-                        (last-keys (cdr (iter local-table key-lst))))
-                    (if (null last-keys)
-                        (setcdr last-table value)
-                      (setcdr last-table (cons (make-new last-keys value)
-                                               (cdr last-table)))))
-                  'ok)
-         (dispatch (m)
+  (letrec ((local-table (list '*table*))
+           (lookup (lambda (key-lst)
+                     (foldl
+                      (lambda (records key)
+                        (cond
+                         ((null records) nil)
+                         ((consp records)
+                          (let ((record (assoc key records)))
+                            (if record (cdr record) nil)))
+                         (t nil)))
+                      (cdr local-table)
+                      key-lst)))
+           (iter (lambda (subtable keys)
                    (cond
-                    ((eq m 'lookup-proc) #'lookup)
-                    ((eq m 'insert-proc!) #'insert!)
-                    (t (error "Unknown operation")))))
-      #'dispatch)))
+                    ((null keys)
+                     (cons subtable nil))
+                    ((consp (cdr subtable))
+                     (cons subtable keys))
+                    (t (let ((record (assoc (car keys) (cdr subtable))))
+                         (if record
+                             (funcall iter record (cdr keys))
+                           (cons subtable keys)))))))
+           (make-new (lambda (keys value)
+                       (if (null (cdr keys))
+                           (cons (car keys) value)
+                         (list (car keys) (funcall make-new (cdr keys) value)))))
+           (insert! (lambda (key-lst value)
+                      (let ((last-table (car (iter local-table key-lst)))
+                            (last-keys (cdr (iter local-table key-lst))))
+                        (if (null last-keys)
+                            (setcdr last-table value)
+                          (setcdr last-table (cons (make-new last-keys value)
+                                                   (cdr last-table))))))
+                    'ok)
+           (dispatch (lambda (m)
+                       (cond
+                        ((eq m 'lookup-proc) lookup)
+                        ((eq m 'insert-proc!) insert!)
+                        (t (error "Unknown operation"))))))
+    dispatch))
 
 ;; (setq t2 (make-table-g))
 ;; (setq get-value (funcall t2 'lookup-proc))
@@ -530,50 +528,49 @@
 
 ;; 3.26
 (defun make-table-b ()
-  (let ((local-table))
-    (cl-labels
-        ((entry (tree) (car tree))
-         (branch-left (tree) (cadr tree))
-         (branch-right (tree) (caddr tree))
-         (make-tree (entry left right) (list entry left right))
-         (lookup (key)
-                 (cl-labels
-                     ((iter (table)
-                            (cond ((null table)
-                                   nil)
-                                  ((= (car (entry table))
-                                      key)
-                                   (cdr (entry table)))
-                                  ((> (car (entry table))
-                                      key)
-                                   (iter (branch-right table)))
-                                  (t (iter (branch-left table))))))
-                   (iter local-table)))
-         (insert! (key value)
-                  (cl-labels
-                      ((iter (table)
-                             (cond
-                              ((null table)
-                               (make-tree (cons key value) nil nil))
-                              ((= (car (entry table)) key)
-                               (setcdr (entry table) value)
-                               table)
-                              ((> (car (entry table)) key)
-                               (make-tree (entry table)
-                                          (branch-left table)
-                                          (iter (branch-right table))))
-                              (t (make-tree
-                                  (entry table)
-                                  (iter (branch-left table))
-                                  (branch-right table))))))
-                    (setq local-table (iter local-table))
-                    'ok))
-         (dispatch (m)
-                   (cond
-                    ((eq m 'lookup-proc) #'lookup)
-                    ((eq m 'insert-proc!) #'insert!)
-                    (t (error "Unknown operation")))))
-      #'dispatch)))
+  (letrec ((local-table)
+           (entry (lambda (tree) (car tree)))
+           (branch-left (lambda (tree) (cadr tree)))
+           (branch-right (lambda (tree) (caddr tree)))
+           (make-tree (lambda (entry left right) (list entry left right)))
+           (lookup (lambda (key)
+                     (letrec
+                         ((iter (lambda (table)
+                                  (cond ((null table)
+                                         nil)
+                                        ((= (car (funcall entry table))
+                                            key)
+                                         (cdr (funcall entry table)))
+                                        ((> (car (funcall entry table))
+                                            key)
+                                         (funcall iter (funcall branch-right table)))
+                                        (t (funcall iter (funcall branch-left table)))))))
+                       (funcall iter local-table))))
+           (insert! (lambda (key value)
+                      (letrec
+                          ((iter (lambda (table)
+                                   (cond
+                                    ((null table)
+                                     (funcall make-tree (cons key value) nil nil))
+                                    ((= (car (funcall entry table)) key)
+                                     (setcdr (funcall entry table) value)
+                                     table)
+                                    ((> (car (funcall entry table)) key)
+                                     (funcall make-tree (funcall entry table)
+                                                (funcall branch-left table)
+                                                (funcall iter (funcall branch-right table))))
+                                    (t (funcall make-tree
+                                        (funcall entry table)
+                                        (funcall iter (funcall branch-left table))
+                                        (funcall branch-right table)))))))
+                        (setq local-table (funcall iter local-table))
+                        'ok)))
+           (dispatch (lambda (m)
+                       (cond
+                        ((eq m 'lookup-proc) lookup)
+                        ((eq m 'insert-proc!) insert!)
+                        (t (error "Unknown operation"))))))
+    dispatch))
 
 ;; TEST
 ;; (setq t1 (make-table-b))
@@ -583,7 +580,7 @@
 ;; (funcall set-value 2 4)
 ;; (funcall set-value 7 9)
 ;; (funcall set-value 1 5)
-;; (funcall get-value 2)
+;; (funcall get-value 7)
 
 
 
@@ -747,34 +744,34 @@
 ;; 3.31 to install the action in the agenda
 
 (defun add-to-agenda! (time action agenda)
-  (cl-labels
+  (letrec
       ((belongs-before?
-        (segments)
-        (or (null segments)
-            (< time (segment-time (car segments)))))
+        (lambda (segments)
+          (or (null segments)
+              (< time (segment-time (car segments))))))
        (make-new-time-segment
-        (time action)
-        (let ((q (make-queue)))
-          (insert-queue! q action)
-          (make-time-segment time q)))
+        (lambda (time action)
+          (let ((q (make-queue)))
+            (insert-queue! q action)
+            (make-time-segment time q))))
        (add-to-segments!
-        (segments)
-        (if (= (segment-time (car segments)) time)
-            (insert-queue! (segment-queue (car segments))
-                           action)
-          (let ((rest (cdr segments)))
-            (if (belongs-before? rest)
-                (setcdr segments
-                        (cons (make-new-time-segment time action)
-                              (cdr segments)))
-              (add-to-segments! rest))))))
-    (let ((segments (segments agenda)))
-      (if (belongs-before? segments)
-          (set-segments!
-           agenda
-           (cons (make-new-time-segment time action)
-                 segments))
-        (add-to-segments! segments)))))
+        (lambda (segments)
+          (if (= (segment-time (car segments)) time)
+              (insert-queue! (segment-queue (car segments))
+                             action)
+            (let ((rest (cdr segments)))
+              (if (funcall belongs-before? rest)
+                  (setcdr segments
+                          (cons (funcall make-new-time-segment time action)
+                                (cdr segments)))
+                (funcall add-to-segments! rest))))))
+       (segments (segments agenda)))
+    (if (funcall belongs-before? segments)
+        (set-segments!
+         agenda
+         (cons (funcall make-new-time-segment time action)
+               segments))
+      (funcall add-to-segments! segments))))
 
 (defun remove-first-agenda-item! (agenda)
   (let ((q (segment-queue (first-segment agenda))))
@@ -1041,13 +1038,13 @@
 
 ;; 3.59
 (defun integrate-series (s)
-  (cl-labels
-      ((series (n stream)
-               (cons-stream
-                (* (stream-car stream)
-                   (/ 1.0 n))
-                (series (1+ n) (stream-cdr stream)))))
-    (series 1 s)))
+  (letrec
+      ((series (lambda (n stream)
+                 (cons-stream
+                  (* (stream-car stream)
+                     (/ 1.0 n))
+                  (funcall series (1+ n) (stream-cdr stream))))))
+    (funcall series 1 s)))
 
 (setq exp-series
       (cons-stream 1 (integrate-series exp-series)))

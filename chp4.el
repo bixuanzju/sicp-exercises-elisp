@@ -412,7 +412,7 @@
 (defun false? (x) (eq x 'false))
 
 (defun make-procedure (parameters body env)
-  (list 'procedure parameters body env))
+  (list 'procedure parameters (scan-out-defines body) env))
 (defun compound-procedure? (p)
   (tagged-list? p 'procedure))
 (defun procedure-parameters (p) (cadr p))
@@ -456,12 +456,40 @@
       (if vals vals
         (traverse-env var (enclosing-environment env))))))
 
-
+;; 4.16
 (defun lookup-variable-value (var env)
   (let ((vals (traverse-env var env)))
-    (if vals
+    (if (and vals (not (eq (car vals) '*unassigned*)))
         (car vals)
       (error "Unbound variable: %s" var))))
+
+(defun my-filter (func seq)
+  (cond ((null seq) '())
+        ((funcall func (car seq))
+         (cons (car seq) (my-filter func (cdr seq))))
+        (t (my-filter func (cdr seq)))))
+
+(defun map-extend (op &rest ls)
+  (if (null (car ls))
+      '()
+    (cons (apply op (mapcar #'car ls))
+          (apply 'map-extend op (mapcar #'cdr ls)))))
+
+(defun scan-out-defines (body)
+  (let* ((all-defines (my-filter #'definition? body))
+         (none-defines (my-filter (lambda (x) (not (definition? x)))
+                                  body))
+         (vars (mapcar #'definition-variable all-defines))
+         (vals (mapcar #'definition-value all-defines))
+         (new-body (append (map-extend (lambda (var val)
+                                         (list 'set! var val))
+                                       vars vals)
+                           none-defines))
+         (bindings (mapcar (lambda (var) `(,var '*unassigned*))
+                           vars)))
+    (if (null all-defines)
+        body
+      (list (make-let-exp bindings new-body)))))
 
 (defun set-variable-value! (var val env)
   (let ((vals (traverse-env var env)))
@@ -575,6 +603,15 @@
 ;;                 (mult (factorial (minus n 1)) n)))
 ;;            the-global-environment)
 ;; (sicp-eval '(factorial 4) the-global-environment)
+;; (sicp-eval '(define (f x)
+;;               (define (even? n) (if (= n 0) true (odd? (minus n 1))))
+;;               (even? x)
+;;               (define (odd? n) (if (= n 0) false (even? (minus n 1)))))
+;;            the-global-environment)
+;; (sicp-eval '(f 3) the-global-environment)
+
+
+
 
 
 
