@@ -39,10 +39,10 @@
     (+ (f-recr (- n 1)) (* 2 (f-recr (- n 2))) (* 3 (f-recr (- n 3))))))
 (defun f-iter (n)
   "By means of a iterative process"
-  (defun help (a1 a2 a3 count)
-    (if (= count 0) a3
-      (help (+ a1 (* 2 a2) (* 3 a3)) a1 a2 (- count 1))))
-  (help 2 1 0 n))
+  (letrec ((help (lambda (a1 a2 a3 count)
+                   (if (= count 0) a3
+                     (funcall help (+ a1 (* 2 a2) (* 3 a3)) a1 a2 (- count 1))))))
+    (funcall help 2 1 0 n)))
 
 ;; 1.12
 (defun pascal-triangle (a b)
@@ -59,13 +59,13 @@
 (defun fast-exp-iter (b n)
   "Use invariant quantity a*base^count,this is
 a powerful technique when designing iterative algorithms."
-  (cl-labels
-      ((iter (a base count)
-             (cond
-              ((= count 0) a)
-              ((even? count) (iter a (* base base) (/ count 2)))
-              (t (iter (* a base) base (- count 1))))))
-    (iter 1 b n)))
+  (letrec
+      ((iter (lambda (a base count)
+               (cond
+                ((= count 0) a)
+                ((even? count) (funcall iter a (* base base) (/ count 2)))
+                (t (funcall iter (* a base) base (- count 1)))))))
+    (funcall iter 1 b n)))
 
 ;; 1.17
 (defun double (n)
@@ -82,13 +82,13 @@ a powerful technique when designing iterative algorithms."
 ;; 1.18
 (defun log-multi-iter (a b)
   "Use invariant quantity s+ab"
-  (cl-labels
-      ((iter (s a b)
-             (cond
-              ((= b 0) s)
-              ((even? b) (iter s (double a) (halve b)))
-              (t (iter (+ s a) a (- b 1))))))
-    (iter 0 a b)))
+  (letrec
+      ((iter (lambda (s a b)
+               (cond
+                ((= b 0) s)
+                ((even? b) (funcall iter s (double a) (halve b)))
+                (t (funcall iter (+ s a) a (- b 1)))))))
+    (funcall iter 0 a b)))
 
 ;; 1.19
 (defun fib (n)
@@ -146,11 +146,11 @@ a powerful technique when designing iterative algorithms."
 
 ;; 1.30
 (defun sum-iter (term a next b)
-  (cl-labelss
-   ((iter (a result)
-          (if (> a b) result
-            (iter (funcall next a) (+ result (funcall term a))))))
-   (iter a 0)))
+  (letrec
+   ((iter (lambda (a result)
+            (if (> a b) result
+              (funcall iter (funcall next a) (+ result (funcall term a)))))))
+   (funcall iter a 0)))
 
 ;; 1.31
 (defun product (term a next b)
@@ -165,11 +165,11 @@ a powerful technique when designing iterative algorithms."
     (* (/ 8 (float 3)) (product f 4 (lambda (n) (+ n 2)) (* n 2)))))
 
 (defun product-iter (term a next b)
-  (cl-labels
-      ((iter (a result)
-             (if (> a b) result
-               (iter (funcall next a) (* result (funcall term a))))))
-    (iter a 1)))
+  (letrec
+      ((iter (lambda (a result)
+               (if (> a b) result
+                 (funcall iter (funcall next a) (* result (funcall term a)))))))
+    (funcall iter a 1)))
 
 ;; 1.32
 (defun accumulate (combiner null-value term a next b)
@@ -185,11 +185,11 @@ a powerful technique when designing iterative algorithms."
   (accumulate '* 1 term a next b))
 
 (defun accumulate-iter (combiner null-value term a next b)
-  (cl-labels
-      ((iter (a result)
-             (if (> a b) result
-               (iter (funcall next a) (funcall combiner result (funcall term a))))))
-    (iter a null-value)))
+  (letrec
+      ((iter (lambda (a result)
+               (if (> a b) result
+                 (funcall iter (funcall next a) (funcall combiner result (funcall term a)))))))
+    (funcall iter a null-value)))
 
 (defun fold-l (f acc l)
   (if (null l) acc
@@ -227,32 +227,32 @@ a powerful technique when designing iterative algorithms."
 (defconst sicp-tolerance 0.00001)
 
 (defun fixed-point (f first-guess)
-  (cl-labels
-      ((close-enough? (v1 v2)
-                      (< (abs (- v1 v2))
-                         sicp-tolerance))
-       (try (guess)
-            (let ((next (funcall f guess)))
-              (if (close-enough? next guess)
-                  next
-                (try next)))))
-    (try first-guess)))
+  (letrec
+      ((close-enough? (lambda (v1 v2)
+                        (< (abs (- v1 v2))
+                           sicp-tolerance)))
+       (try (lambda (guess)
+              (let ((next (funcall f guess)))
+                (if (funcall close-enough? next guess)
+                    next
+                  (funcall try next))))))
+    (funcall try first-guess)))
 
 (defconst golden-ratio (fixed-point (lambda (x) (+ 1 (/ 1 x))) 1.0))
 
 ;; 1.36
 (defun fixed-point-print (f first-guess)
-  (cl-labels
-      ((close-enough? (v1 v2)
-                      (< (abs (- v1 v2))
-                         sicp-tolerance))
-       (try (guess)
-            (let ((next (funcall f guess)))
-              (if (close-enough? next guess)
-                  next
-                (message "%s" next)
-                (try next)))))
-    (try first-guess)))
+  (letrec
+      ((close-enough? (lambda (v1 v2)
+                        (< (abs (- v1 v2))
+                           sicp-tolerance)))
+       (try (lambda (guess)
+              (let ((next (funcall f guess)))
+                (if (funcall close-enough? next guess)
+                    next
+                  (message "%s" next)
+                  (funcall try next))))))
+    (funcall try first-guess)))
 
 ;; (fixed-point-print (lambda (x) (/ (log 1000) (log x))) 5.0)
 
@@ -260,11 +260,11 @@ a powerful technique when designing iterative algorithms."
 
 ;; 1.37
 (defun cont-frac (n d k)
-  (cl-labels
-      ((iter (kk result)
-             (if (= kk 0) result
-               (iter (- kk 1) (/ (funcall n kk) (+ (funcall d kk) result))))))
-    (iter k 0)))
+  (letrec
+      ((iter (lambda (kk result)
+               (if (= kk 0) result
+                 (funcall iter (- kk 1) (/ (funcall n kk) (+ (funcall d kk) result)))))))
+    (funcall iter k 0)))
 
 
 ;; 1.38
@@ -332,29 +332,29 @@ a powerful technique when designing iterative algorithms."
 
 ;; 1.46
 (defun iterative-improve (good-enough? improve)
-  (cl-labels
-      ((iter (guess)
-             (if (funcall good-enough? guess)
-                 guess
-               (iter (funcall improve guess)))))
+  (letrec
+      ((iter (lambda (guess)
+               (if (funcall good-enough? guess)
+                   guess
+                 (funcall iter (funcall improve guess))))))
     (lambda (guess)
-      (iter guess))))
+      (funcall iter guess))))
 
 (defun sqrt-iter (x)
-  (cl-labels
-      ((good-enough? (guess)
-                     (< (abs (- (square guess) x)) sicp-tolerance))
-       (improve (guess)
-                (funcall (average-damp (lambda (y) (/ x y))) guess)))
-    (funcall (iterative-improve 'good-enough? 'improve) 1.0)))
+  (letrec
+      ((good-enough? (lambda (guess)
+                       (< (abs (- (square guess) x)) sicp-tolerance)))
+       (improve (lambda (guess)
+                  (funcall (average-damp (lambda (y) (/ x y))) guess))))
+    (funcall (iterative-improve good-enough? improve) 1.0)))
 
 (defun fixed-point-iter (f first-guess)
-  (cl-labels
-      ((close-enough? (guess)
-                      (< (abs (- (funcall f guess) guess)) sicp-tolerance))
-       (improve (guess)
-                (funcall f guess)))
-    (funcall (iterative-improve 'close-enough? 'improve) first-guess)))
+  (letrec
+      ((close-enough? (lambda (guess)
+                        (< (abs (- (funcall f guess) guess)) sicp-tolerance)))
+       (improve (lambda (guess)
+                  (funcall f guess))))
+    (funcall (iterative-improve close-enough? improve) first-guess)))
 
 ;; Local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)

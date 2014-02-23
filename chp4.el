@@ -49,6 +49,7 @@
         ((cond? exp) (sicp-eval (cond->if exp) env))
         ((let? exp) (sicp-eval (let->combination exp) env))
         ((let*? exp) (sicp-eval (let*->nexeted-lets exp) env))
+        ((letrec? exp) (sicp-eval (letrec->let exp) env))
         ((for? exp) (sicp-eval (for->let exp) env))
         ((while? exp) (sicp-eval (while->let exp) env))
         ((application? exp)
