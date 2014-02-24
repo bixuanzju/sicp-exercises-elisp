@@ -231,17 +231,17 @@
 
 (defun eval-and-clauses (clauses env)
   (cond ((null clauses)
-         'true)
+         t)
         ((last-clause? clauses)
          (if (true? (sicp-eval (car clauses) env))
-             'true
-           'false))
+             t
+           nil))
         (t
          (let ((first (car clauses))
                (rest (cdr clauses)))
            (if (true? (sicp-eval first env))
                (eval-and-clauses rest env)
-             'false)))))
+          nil)))))
 
 (defun and? (exp) (tagged-list? exp 'and))
 (defun and-clauses (exp) (cdr exp))
@@ -253,16 +253,16 @@
 
 (defun eval-or-clauses (clauses env)
   (cond ((null clauses)
-         'false)
+         nil)
         ((last-clause? clauses)
          (if (true? (sicp-eval (car clauses) env))
-             'true
-           'false))
+             t
+           nil))
         (t
          (let ((first (car clauses))
                (rest (cdr clauses)))
            (if (true? (sicp-eval first env))
-               'true
+              t
              (eval-or-clauses rest env))))))
 
 (defun or? (exp) (tagged-list? exp 'or))
@@ -410,7 +410,7 @@
 ;;                       (quote Done)))
 
 (defun true? (x) (not (eq x nil)))
-(defun false? (x) (eq x 'false))
+(defun false? (x) (eq x nil))
 
 (defun make-procedure (parameters body env)
   (list 'procedure parameters (scan-out-defines body) env))
@@ -612,10 +612,145 @@
 ;; (sicp-eval '(f 3) the-global-environment)
 
 
+;; 4.20
+(defun letrec? (exp)
+  (tagged-list? exp 'letrec))
+(defun letrec->let (exp)
+  (let* ((bindings (cadr exp))
+         (body (cddr exp))
+         (vars (mapcar #'car bindings))
+         (vals (mapcar #'cadr bindings))
+         (nbindings (mapcar (lambda (var) `(,var '*unassigned*))
+                            vars))
+         (nbody (append (map-extend (lambda (var val)
+                                (list 'set! var val))
+                                    vars vals)
+                        body)))
+    (make-let-exp nbindings nbody)))
 
+;; TEST
+;; (letrec->let '(letrec ((a 4)
+;;                        (b 2))
+;;                 (add a b))) =>
+;; (let ((a (quote *unassigned*))
+;;       (b (quote *unassigned*)))
+;;   (set! a 4)
+;;   (set! b 2)
+;;   (add a b))
+;; (sicp-eval '(letrec ((fact (lambda (n)
+;;                              (if (= n 1) 1 (mult n (fact (minus n 1)))))))
+;;               (fact 10)) the-global-environment)
 
+;; 4.21
+(sicp-eval '((lambda (n)
+               ((lambda (fact) (fact fact n))
+                (lambda (ft k) (if (= k 1) 1 (mult k (ft ft (minus k 1)))))))
+             10) the-global-environment)
+(sicp-eval '((lambda (n)
+               ((lambda (fibs) (fibs fibs n))
+                (lambda (ft k) (if (or (= k 0) (= k 1)) 1
+                            (add (ft ft (minus k 1))
+                                 (ft ft (minus k 2)))))))
+             4) the-global-environment)
 
+(sicp-eval '(define (f x)
+              ((lambda (even? odd?) (even? even? odd? x))
+               (lambda (ev? od? n)
+                 (if (= n 0) true (od? ev? od? (minus n 1))))
+               (lambda (ev? od? n)
+                 (if (= n 0) false (ev? od? ev? (minus n 1))))))
+           the-global-environment)
 
+
+;; 4.22
+(defun analyze (exp)
+  (cond
+   ((self-evaluating? exp) (analyze-self-evaluating exp))
+   ((quoted? exp) (analyze-quoted exp))
+   ((variable? exp) (analyze-variable exp))
+   ((assignment? exp) (analyze-assignment exp))
+   ((definition? exp) (analyze-definition exp))
+   ((if? exp) (analyze-if exp))
+   ((lambda? exp) (analyze-lambda exp))
+   ((let? exp) (analyze (let->combination exp)))
+   ((begin? exp) (analyze-sequence (begin-actions exp)))
+   ((cond? exp) (analyze (cond->if exp)))
+   ((application? exp) (analyze-application exp))
+   (t (error "Unknown expression type"))))
+
+(defun analyze-self-evaluating (exp)
+  (lambda (env) exp))
+(defun analyze-quoted (exp)
+  (let ((qval (text-of-quotation exp)))
+    (lambda (env) qval)))
+(defun analyze-variable (exp)
+  (lambda (env) (lookup-variable-value exp env)))
+(defun analyze-assignment (exp)
+  (let ((var (assignment-variable exp))
+        (vproc (analyze (assignment-value exp))))
+    (lambda (env)
+      (set-variable-value! var (funcall vproc env) env)
+      'OK)))
+(defun analyze-definition (exp)
+  (let ((var (definition-variable exp))
+        (vproc (analyze (definition-value exp))))
+    (lambda (env)
+      (define-variable! var (funcall vproc env) env)
+      'OK)))
+
+(defun analyze-if (exp)
+  (let ((pproc (analyze (if-predicate exp)))
+        (cproc (analyze (if-consequence exp)))
+        (aproc (analyze (if-alternative exp))))
+    (lambda (env) (if (true? (funcall pproc env))
+                 (funcall cproc env)
+               (funcall aproc env)))))
+
+(defun analyze-lambda (exp)
+  (let ((vars (lambda-parameters exp))
+        (bproc (analyze-sequence (lambda-body exp))))
+    (lambda (env) (make-procedure vars bproc env))))
+
+(defun analyze-sequence (exps)
+  (letrec ((sequentially
+            (lambda (proc1 proc2)
+              (lambda (env) (funcall proc1 env) (funcall proc2 env))))
+           (loop (lambda (first-proc rest-procs)
+                   (if (null rest-procs)
+                       first-proc
+                     (funcall loop (funcall sequentially
+                                            first-proc
+                                            (car rest-procs))
+                              (cdr rest-procs)))))
+           (procs (mapcar #'analyze exps)))
+    (if (null procs)
+        (error "Empty sequence")
+      (funcall loop (car procs) (cdr procs)))))
+
+(defun analyze-application (exp)
+  (let ((fproc (analyze (operator exp)))
+        (aprocs (mapcar #'analyze (operands exp))))
+    (lambda (env)
+      (execute-application
+       (funcall fproc env)
+       (mapcar (lambda (aproc) (funcall aproc env))
+               aprocs)))))
+(defun execute-application (proc args)
+  (cond ((primitive-procedure? proc)
+         (apply-primitive-procedure proc args))
+        ((compound-procedure? proc)
+         (funcall (procedure-body proc)
+                  (extend-environment
+                   (procedure-parameters proc)
+                   args
+                   (procedure-environment proc))))
+        (t (error "Unknown procedure type"))))
+
+(defun sicp-eval2 (exp env)
+  (funcall (analyze exp) env))
+
+(sicp-eval2 '(let ((a 3) (b 4))
+               (add a b)) the-global-environment)
 
 ;; local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
