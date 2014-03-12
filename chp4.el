@@ -2,8 +2,8 @@
 
 ;; Copyright (C) Jeremy Bi
 
-;; Author: Jeremy Bi <xbi@zju.edu.cn>
-;; Maintainer: Jeremy Bi <xbi@zju.edu.cn>
+;; Author: Jeremy Bi <bixuanzju@qq.com>
+;; Maintainer: Jeremy Bi <bixuanzju@qq.com>
 ;; Created:  21 Feb 2014
 ;; Keywords: convenience editing
 ;; URL: https://github.com/bixuanzju/emacs_repo
@@ -54,7 +54,7 @@
         ((while? exp) (sicp-eval (while->let exp) env))
         ((application? exp)
          (sicp-apply (sicp-eval (operator exp) env)
-                (list-of-values (operands exp) env)))
+                     (list-of-values (operands exp) env)))
         (t (error "Unknown expression type"))))
 
 (defun sicp-apply (procedure arguments)
@@ -611,7 +611,7 @@
 ;;            the-global-environment)
 ;; (sicp-eval '(f 3) the-global-environment)
 
-
+;; ——— Build letrec ——————————————————————————
 ;; 4.20
 (defun letrec? (exp)
   (tagged-list? exp 'letrec))
@@ -661,7 +661,7 @@
                  (if (= n 0) false (ev? od? ev? (minus n 1))))))
            the-global-environment)
 
-
+;; ——— Separate syntax analysis from evaluation ————————————————————————————————
 ;; 4.22
 (defun analyze (exp)
   (cond
@@ -673,6 +673,7 @@
    ((if? exp) (analyze-if exp))
    ((lambda? exp) (analyze-lambda exp))
    ((let? exp) (analyze (let->combination exp)))
+   ((unless? exp) (analyze (unless->if exp)))
    ((begin? exp) (analyze-sequence (begin-actions exp)))
    ((cond? exp) (analyze (cond->if exp)))
    ((application? exp) (analyze-application exp))
@@ -752,8 +753,146 @@
 (sicp-eval2 '(let ((a 3) (b 4))
                (add a b)) the-global-environment)
 
+;; ——— Lazy Evaluation built in ————————————————————————————————————————————————
+;; 4.26
+(defun unless? (exp)
+  (tagged-list? exp 'unless))
+(defun unless-condition (exp)
+  (cadr exp))
+(defun unless-usual (exp)
+  (caddr exp))
+(defun unless-excep (exp)
+  (cadddr exp))
+
+(defun unless->if (exp)
+  (let ((condition (unless-condition exp))
+        (usual (unless-usual exp))
+        (excep (unless-excep exp)))
+    `(if ,condition ,excep ,usual)))
+
+;; Test
+;; (unless->if '(unless (= n 1)
+;;                         (fact (- n 1))
+;;                         1))
+
+;; (sicp-eval2 '(define (factorial n)
+;;                (unless (= n 1)
+;;                  (mult n (factorial (minus n 1)))
+;;                  1)) the-global-environment)
+;; (sicp-eval2 '(factorial 4) the-global-environment)
+
+(defun sicp-eval3 (exp env)
+  (cond ((self-evaluating? exp) exp)
+        ((variable? exp) (lookup-variable-value exp env))
+        ((quoted? exp) (text-of-quotation exp))
+        ((assignment? exp) (eval-assignment exp env))
+        ((definition? exp) (eval-definition exp env))
+        ((if? exp) (eval-if2 exp env))
+        ((unbound? exp) (eval-make-unbound exp env))
+        ((and? exp) (eval-and exp env))
+        ((or? exp) (eval-or exp env))
+        ((lambda? exp) (make-procedure (lambda-parameters exp)
+                                  (lambda-body exp)
+                                  env))
+        ((begin? exp)
+         (eval-sequence (begin-actions exp) env))
+        ((cond? exp) (sicp-eval (cond->if exp) env))
+        ((let? exp) (sicp-eval (let->combination exp) env))
+        ((let*? exp) (sicp-eval (let*->nexeted-lets exp) env))
+        ((letrec? exp) (sicp-eval (letrec->let exp) env))
+        ((for? exp) (sicp-eval (for->let exp) env))
+        ((while? exp) (sicp-eval (while->let exp) env))
+        ((application? exp)
+         (sicp-apply2 (actual-value (operator exp) env)
+                     (operands exp)
+                     env))
+        (t (error "Unknown expression type"))))
+
+(defun actual-value (exp env)
+  (force-it (sicp-eval3 exp env)))
+
+(defun sicp-apply2 (procedure arguments env)
+  (cond
+   ((primitive-procedure? procedure)
+    (apply-primitive-procedure
+     procedure
+     (list-of-arg-values arguments env)))
+   ((compound-procedure? procedure)
+    (eval-sequence2
+     (procedure-body procedure)
+     (extend-environment
+      (procedure-parameters procedure)
+      (list-of-delayed-args arguments env)
+      (procedure-environment procedure))))
+   (t (error "Unknown procedure type"))))
+
+(defun eval-sequence2 (exps env)
+  (cond ((last-exp? exps)
+         (sicp-eval3 (first-exp exps) env))
+        (t
+         (sicp-eval3 (first-exp exps) env)
+         (eval-sequence2 (rest-exps exps) env))))
+
+(defun list-of-arg-values (exps env)
+  (if (no-operands? exps)
+      '()
+    (cons (actual-value (first-operand exps)
+                        env)
+          (list-of-arg-values (rest-operands exps)
+                              env))))
+
+(defun list-of-delayed-args (exps env)
+  (if (no-operands? exps)
+      '()
+    (cons (delay-it (first-operand exps)
+                    env)
+          (list-of-delayed-args (rest-operands exps)
+                                env))))
+
+(defun eval-if2 (exp env)
+  (if (true? (actual-value (if-predicate exp) env))
+      (sicp-eval3 (if-consequence exp) env)
+    (sicp-eval3 (if-alternative exp) env)))
+
+(defun delay-it (exp env)
+  (list 'thunk exp env))
+(defun thunk? (obj)
+  (tagged-list? obj 'thunk))
+(defun thunk-exp (thunk)
+  (cadr thunk))
+(defun thunk-env (thunk)
+  (caddr thunk))
+
+(defun evaluated-thunk? (obj)
+  (tagged-list? obj 'evaluated-thunk))
+(defun thunk-value (evaluated-thunk)
+  (cadr evaluated-thunk))
+(defun force-it (obj)
+  (cond ((thunk? obj)
+         (let ((result (actual-value (thunk-exp obj)
+                                     (thunk-env obj))))
+           (setcar obj 'evaluated-thunk)
+           (setcar (cdr obj) result)
+           (setcdr (cdr obj) nil)
+           result))
+        ((evaluated-thunk? obj)
+         (thunk-value obj))
+        (t obj)))
+
+;; 4.27
+;; (sicp-eval3 '(define count 0) the-global-environment)
+;; (sicp-eval3 '(define (id x) (set! count (add count 1) x)) the-global-environment)
+;; (sicp-eval3 '(define w (id (id 10))) the-global-environment)
+;; (sicp-eval3 'count the-global-environment)
+;; (sicp-eval3 'w the-global-environment)
+;; (sicp-eval3 'count the-global-environment)
+
+
+
+
 ;; local Variables:
 ;; flycheck-disabled-checkers: (emacs-lisp-checkdoc)
+;; outline-regexp: ";; ———"
 ;; End:
 
 ;;; chp4.el ends here
